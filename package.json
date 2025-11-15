@@ -1,0 +1,17 @@
+{
+  "name": "quiz-comportamental-app",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "concurrently \"npm:dev-client\" \"npm:dev-server\"",
+    "dev-client": "vite",
+    "dev-server": "npm --prefix server start",
+    "build": "npm run build --prefix client",
+    "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
+    "preview": "vite preview"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}
