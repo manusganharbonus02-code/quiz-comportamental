@@ -1,15 +1,10 @@
-{
-  "name": "quiz-comportamental-app-root",
-  "version": "1.0.0",
-  "private": true,
-  "description": "Root monorepo for the AI Behavioral Profile Quiz",
   "scripts": {
-    "postinstall": "npm install --prefix server && npm install --prefix client",
-    "build": "npm run build --prefix client",
-    "start": "NODE_ENV=production node server/server.js",
-    "dev": "concurrently \"npm:dev --prefix client\" \"node --watch server/server.js\""
+    "start": "node server/server.mjs",
+    "build": "npm run install-client && npm run build-client",
+    "install-client": "cd client && npm install",
+    "build-client": "cd client && npm run build",
+    "dev-server": "node server/server.mjs",
+    "dev-client": "cd client && npm run dev",
+    "dev": "npm run dev-server",
+    "test": "echo \"Error: no test specified\" && exit 1"
   },
-  "devDependencies": {
-    "concurrently": "^8.2.2"
-  }
-}
