@@ -1,9 +1,12 @@
+  "engines": {
+    "node": "18.x"
+  },
   "scripts": {
-    "start": "node server/index.mjs",
+    "start": "node server/server.mjs",
     "build": "npm run install-client && npm run build-client",
     "install-client": "cd client && npm install",
     "build-client": "cd client && npm run build",
-    "dev-server": "node server/index.mjs",
+    "dev-server": "node server/server.mjs",
     "dev-client": "cd client && npm run dev",
     "dev": "npm run dev-server",
     "test": "echo \"Error: no test specified\" && exit 1"
