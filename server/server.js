@@ -17,20 +17,24 @@ app.use(express.json());
 
 const transactions = new Map();
 
-// Initialize Gemini AI
-if (!process.env.API_KEY) {
-    console.error("FATAL ERROR: API_KEY environment variable is not set.");
-    process.exit(1);
-}
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-
+// --- Variáveis Globais (Inicializadas abaixo) ---
+let ai;
 let ALL_QUESTIONS = [];
-try {
-    const data = await fs.readFile(path.join(__dirname, 'questions.json'), 'utf-8');
-    ALL_QUESTIONS = JSON.parse(data);
-} catch (error) {
-    console.error("Failed to load questions.json:", error);
-    process.exit(1);
+
+
+// --- Funções de Inicialização ---
+
+async function loadQuestions() {
+    try {
+        // Tenta carregar o arquivo, assumindo que está na mesma pasta do servidor
+        const data = await fs.readFile(path.join(__dirname, 'questions.json'), 'utf-8');
+        ALL_QUESTIONS = JSON.parse(data);
+        console.log("SUCCESS: Questions loaded successfully.");
+    } catch (error) {
+        // O servidor não deve parar se o arquivo faltar, apenas avisa (CRITICAL WARNING)
+        console.error("CRITICAL WARNING: Failed to load questions.json. Questions API will be empty.", error.message);
+        ALL_QUESTIONS = []; // Garante que a lista fique vazia, mas o servidor não para
+    }
 }
 
 function getShuffledSubset(arr, num) {
@@ -41,8 +45,9 @@ function getShuffledSubset(arr, num) {
 // --- API Endpoints ---
 
 app.get('/api/questions', (req, res) => {
+    // Agora verifica se a lista foi carregada
     if (ALL_QUESTIONS.length === 0) {
-        return res.status(500).json({ message: "Question bank is not available." });
+        return res.status(500).json({ message: "Question bank is not available. Check server logs." });
     }
     const questions = getShuffledSubset(ALL_QUESTIONS, 25);
     res.json({ questions });
@@ -65,6 +70,9 @@ app.get('/api/report/preview/:transactionId', async (req, res) => {
     if (!transaction) return res.status(404).json({ message: 'Transaction not found.' });
 
     try {
+        // Verifica se a IA foi inicializada antes de usar
+        if (!ai) return res.status(500).json({ previewText: 'Server is initializing. Try again in a moment.' });
+        
         const answersString = JSON.stringify(transaction.answers, null, 2);
         const prompt = `
             Você é um coach de alta performance e especialista em análise comportamental.
@@ -90,6 +98,7 @@ app.get('/api/report/preview/:transactionId', async (req, res) => {
 
     } catch (error) {
         console.error('Gemini preview generation error:', error);
+        // Resposta alternativa que o Frontend pode renderizar em caso de falha da IA
         res.status(500).json({ previewText: 'Analisamos suas respostas e identificamos um padrão fascinante em sua abordagem para desafios, mas também uma oportunidade única para ampliar seu impacto. O relatório completo detalha como transformar esse potencial em resultados concretos.' });
     }
 });
@@ -99,8 +108,6 @@ app.post('/api/webhook/kiwify', (req, res) => {
     const { 'order_id': orderId, 'order_status': status } = req.body;
     
     // NOTE: This is a simplified logic for a single-user demo.
-    // It finds the most recent pending transaction and assumes the webhook is for it.
-    // This is NOT robust for a real multi-user production environment.
     let transactionToUpdate = null;
     let transactionId = null;
     let latestTime = 0;
@@ -139,6 +146,8 @@ app.get('/api/report/full/:transactionId', async (req, res) => {
     if (transaction.status !== 'paid') return res.status(403).json({ message: 'Payment not confirmed.' });
 
     try {
+        if (!ai) return res.status(500).json({ message: 'Server is initializing. Try again in a moment.' });
+
         const answersString = JSON.stringify(transaction.answers, null, 2);
         const prompt = `
             Você é um coach de carreira e especialista em psicologia comportamental.
@@ -180,14 +189,39 @@ app.get('/api/report/full/:transactionId', async (req, res) => {
     }
 });
 
-if (process.env.NODE_ENV === 'production') {
-    const clientBuildPath = path.join(__dirname, '..', 'client', 'dist');
-    app.use(express.static(clientBuildPath));
-    app.get('*', (req, res) => {
-        res.sendFile(path.join(clientBuildPath, 'index.html'));
+
+// --- Inicialização do Servidor (Função Assíncrona) ---
+
+async function initializeServer() {
+    // 1. Verifica a chave API
+    if (!process.env.API_KEY) {
+        console.error("FATAL ERROR: API_KEY environment variable is not set. Cannot initialize AI.");
+        // Retorna, mas NÃO encerra o processo se possível para tentar servir o frontend
+        // No Render, este erro fatal irá provavelmente reiniciar o serviço
+        return; 
+    }
+    
+    // Inicializa a IA (depois de verificar a chave)
+    ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+
+    // 2. Carrega as perguntas
+    await loadQuestions();
+
+    // 3. Configuração de arquivos estáticos (Frontend Build)
+    if (process.env.NODE_ENV === 'production') {
+        // A Render sugere que o build do client está em 'client/dist'
+        const clientBuildPath = path.join(__dirname, '..', 'client', 'dist');
+        app.use(express.static(clientBuildPath));
+        app.get('*', (req, res) => {
+            res.sendFile(path.join(clientBuildPath, 'index.html'));
+        });
+    }
+
+    // 4. Inicia o servidor
+    app.listen(port, () => {
+        console.log(`Server listening on port ${port}`);
     });
 }
 
-app.listen(port, () => {
-    console.log(`Server listening on port ${port}`);
-});
+// Inicia o processo do servidor
+initializeServer();
