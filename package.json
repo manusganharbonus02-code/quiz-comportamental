@@ -1,3 +1,12 @@
+{
+  "name": "quiz-comportamental-fullstack",
+  "version": "1.0.0",
+  "description": "Aplicativo Fullstack para Quiz Comportamental com Backend Gemini AI e Frontend React.",
+  "main": "server/server.mjs",
+  "type": "module",
+  "engines": {
+    "node": "18.x"
+  },
   "scripts": {
     "start": "node server/server.mjs",
     "build": "npm run install-client && npm run build-client",
@@ -8,3 +17,12 @@
     "dev": "npm run dev-server",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
+  "dependencies": {
+    "@google/genai": "^0.1.0",
+    "axios": "^1.6.8",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "react-router-dom": "^6.22.3"
+  }
+}
