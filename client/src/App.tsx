@@ -45,7 +45,8 @@ function App() {
       case 'quiz':
         return <Quiz onComplete={handleQuizComplete} onCancel={handleCancelQuiz} />;
       case 'report':
-        if (state.transactionId && state.answers) {
+        if (state.transactionId) {
+          // Pass only transactionId and onRestart. The report page itself will fetch the answers if needed.
           return <Report transactionId={state.transactionId} onRestart={handleRestart} />;
         }
         // Fallback to home if report is rendered without necessary data
