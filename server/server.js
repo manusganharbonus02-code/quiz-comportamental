@@ -15,25 +15,21 @@ const port = process.env.PORT || 4000;
 app.use(cors());
 app.use(express.json());
 
-// --- SERVE OS ARQUIVOS ESTÁTICOS DO REACT ---
-// Esta é a parte crucial que faltava para a Render.
-// Diz ao servidor onde encontrar o site que foi "construído".
-const clientBuildPath = path.join(__dirname, '../client/dist');
-app.use(express.static(clientBuildPath));
-
-// Armazenamento em memória para as transações
 const transactions = new Map();
 
-// Inicializa a IA da Gemini
+// Initialize Gemini AI
+if (!process.env.API_KEY) {
+    console.error("FATAL ERROR: API_KEY environment variable is not set.");
+    process.exit(1);
+}
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
-// Carrega as perguntas do arquivo JSON
 let ALL_QUESTIONS = [];
 try {
     const data = await fs.readFile(path.join(__dirname, 'questions.json'), 'utf-8');
     ALL_QUESTIONS = JSON.parse(data);
 } catch (error) {
-    console.error("Falha ao carregar questions.json:", error);
+    console.error("Failed to load questions.json:", error);
     process.exit(1);
 }
 
@@ -42,11 +38,11 @@ function getShuffledSubset(arr, num) {
   return shuffled.slice(0, num);
 }
 
-// --- Endpoints da API ---
+// --- API Endpoints ---
 
 app.get('/api/questions', (req, res) => {
     if (ALL_QUESTIONS.length === 0) {
-        return res.status(500).json({ message: "O banco de perguntas não está disponível." });
+        return res.status(500).json({ message: "Question bank is not available." });
     }
     const questions = getShuffledSubset(ALL_QUESTIONS, 25);
     res.json({ questions });
@@ -55,55 +51,143 @@ app.get('/api/questions', (req, res) => {
 app.post('/api/quiz/submit', (req, res) => {
     const { answers } = req.body;
     if (!answers || typeof answers !== 'object' || Object.keys(answers).length === 0) {
-        return res.status(400).json({ message: 'Respostas inválidas.' });
+        return res.status(400).json({ message: 'Invalid answers provided.' });
     }
     const transactionId = `txn_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
-    transactions.set(transactionId, { answers, status: 'pending', createdAt: new Date() });
+    transactions.set(transactionId, { answers, status: 'pending_payment', createdAt: new Date() });
+    console.log(`Transaction created: ${transactionId}`);
     res.status(201).json({ transactionId });
 });
 
 app.get('/api/report/preview/:transactionId', async (req, res) => {
     const { transactionId } = req.params;
     const transaction = transactions.get(transactionId);
-    if (!transaction) return res.status(404).json({ message: 'Transação não encontrada.' });
+    if (!transaction) return res.status(404).json({ message: 'Transaction not found.' });
 
     try {
-        const answersString = JSON.stringify(transaction.answers);
-        const prompt = `Você é um psicólogo comportamental criando uma análise prévia e instigante. Baseado nestas respostas de um quiz (${answersString}), escreva uma prévia de 2-3 frases que seja misteriosa e persuasiva. Dê uma pista sobre uma força única e um 'potencial oculto' ou 'desafio surpreendente'. O objetivo é deixar o usuário extremamente curioso para comprar o relatório completo. Não revele detalhes concretos. Termine com reticências (...) para criar suspense. Responda em português do Brasil.`;
-        const response = await ai.models.generateContent({ model: 'gemini-2.5-flash', contents: prompt, config: { temperature: 0.8 } });
-        res.json({ previewText: response.text.trim() });
+        const answersString = JSON.stringify(transaction.answers, null, 2);
+        const prompt = `
+            Você é um coach de alta performance e especialista em análise comportamental.
+            Sua tarefa é analisar as respostas de um quiz de autoavaliação (${answersString}) e criar uma amostra de análise curta (2-3 frases) que seja extremamente persuasiva, gerando curiosidade e um senso de urgência para que o usuário compre o relatório completo.
+
+            Siga estes passos rigorosamente:
+            1. Identifique o padrão positivo mais fascinante nas respostas e elogie-o de forma inspiradora e específica. Ex: "Sua capacidade de manter o foco sob pressão é notável...".
+            2. Em seguida, identifique o 'ponto cego' ou o desafio mais crítico que as respostas sugerem. Apresente isso como uma oportunidade crucial que cria um senso de urgência. Ex: "...no entanto, essa mesma determinação revela um padrão surpreendente na sua tomada de decisão que pode estar, sem que você perceba, limitando seu impacto máximo."
+            3. Conecte as duas ideias de forma que o relatório completo seja posicionado como a chave indispensável para resolver esse conflito e desbloquear o verdadeiro potencial.
+
+            O tom deve ser profissional, direto e intrigante. O resultado precisa parecer 100% personalizado.
+            Responda em português do Brasil.
+        `;
+
+        const response = await ai.models.generateContent({
+            model: 'gemini-2.5-flash',
+            contents: prompt,
+            config: { temperature: 0.8 }
+        });
+        
+        const previewText = response.text.trim();
+        res.json({ previewText });
+
     } catch (error) {
-        console.error('Erro na prévia da Gemini:', error);
-        res.status(500).json({ message: 'Erro ao gerar a prévia.' });
+        console.error('Gemini preview generation error:', error);
+        res.status(500).json({ previewText: 'Analisamos suas respostas e identificamos um padrão fascinante em sua abordagem para desafios, mas também uma oportunidade única para ampliar seu impacto. O relatório completo detalha como transformar esse potencial em resultados concretos.' });
     }
+});
+
+app.post('/api/webhook/kiwify', (req, res) => {
+    console.log('Kiwify webhook received:', req.body);
+    const { 'order_id': orderId, 'order_status': status } = req.body;
+    
+    // NOTE: This is a simplified logic for a single-user demo.
+    // It finds the most recent pending transaction and assumes the webhook is for it.
+    // This is NOT robust for a real multi-user production environment.
+    let transactionToUpdate = null;
+    let transactionId = null;
+    let latestTime = 0;
+
+    for (const [key, value] of transactions.entries()) {
+        if (value.status === 'pending_payment' && value.createdAt.getTime() > latestTime) {
+            latestTime = value.createdAt.getTime();
+            transactionToUpdate = value;
+            transactionId = key;
+        }
+    }
+
+    if (status === 'paid' && transactionToUpdate) {
+        transactionToUpdate.status = 'paid';
+        transactionToUpdate.paymentDetails = req.body;
+        transactions.set(transactionId, transactionToUpdate);
+        console.log(`SUCCESS: Payment confirmed via webhook for transaction: ${transactionId}`);
+    } else {
+        console.warn(`Webhook ignored: status was '${status}' or no matching pending transaction found.`);
+    }
+    
+    res.status(200).send({ message: 'Webhook processed' });
+});
+
+app.get('/api/payment/status/:transactionId', (req, res) => {
+    const { transactionId } = req.params;
+    const transaction = transactions.get(transactionId);
+    if (!transaction) return res.status(404).json({ message: 'Transaction not found.' });
+    res.json({ status: transaction.status });
 });
 
 app.get('/api/report/full/:transactionId', async (req, res) => {
     const { transactionId } = req.params;
     const transaction = transactions.get(transactionId);
-    if (!transaction) return res.status(404).json({ message: 'Transação não encontrada.' });
+    if (!transaction) return res.status(404).json({ message: 'Transaction not found.' });
+    if (transaction.status !== 'paid') return res.status(403).json({ message: 'Payment not confirmed.' });
 
     try {
-        const answersString = JSON.stringify(transaction.answers);
-        const prompt = `Você é um coach de carreira e especialista em psicologia comportamental. Baseado nestas respostas de quiz: ${answersString}, gere uma análise personalizada e acionável. Sua resposta DEVE ser um objeto JSON válido. O objeto JSON deve ter três chaves: "scores" (um objeto com pontuações para "focus", "productivity", e "resilience" de 1 a 5, podendo ser decimal), "interpretations" (um objeto com parágrafos detalhados para "focus", "productivity", e "resilience"), e "recommendations" (um array com 5 dicas concretas e personalizadas). O tom deve ser profissional, empático e encorajador. Evite generalidades. Responda em português do Brasil.`;
-        const responseSchema = { type: Type.OBJECT, properties: { scores: { type: Type.OBJECT, properties: { focus: { type: Type.NUMBER }, productivity: { type: Type.NUMBER }, resilience: { type: Type.NUMBER } } }, interpretations: { type: Type.OBJECT, properties: { focus: { type: Type.STRING }, productivity: { type: Type.STRING }, resilience: { type: Type.STRING } } }, recommendations: { type: Type.ARRAY, items: { type: Type.STRING } } } };
-        const response = await ai.models.generateContent({ model: 'gemini-2.5-flash', contents: prompt, config: { temperature: 0.7, responseMimeType: 'application/json', responseSchema } });
-        const report = JSON.parse(response.text.trim());
+        const answersString = JSON.stringify(transaction.answers, null, 2);
+        const prompt = `
+            Você é um coach de carreira e especialista em psicologia comportamental.
+            Baseado nestas respostas de quiz: ${answersString}, gere uma análise personalizada e acionável.
+            Sua resposta DEVE ser um objeto JSON válido, sem formatação markdown.
+            O objeto JSON deve ter três chaves: "scores", "interpretations", e "recommendations".
+            - "scores": um objeto com pontuações numéricas de 1.0 a 5.0 para "focus", "productivity", e "resilience".
+            - "interpretations": um objeto com parágrafos detalhados e perspicazes para "focus", "productivity", e "resilience".
+            - "recommendations": um array com exatamente 5 strings, cada uma sendo uma dica concreta e personalizada.
+            O tom deve ser profissional, empático e encorajador.
+            Responda em português do Brasil.
+        `;
+        
+        const responseSchema = {
+          type: Type.OBJECT, properties: {
+            scores: { type: Type.OBJECT, properties: { focus: { type: Type.NUMBER }, productivity: { type: Type.NUMBER }, resilience: { type: Type.NUMBER } } },
+            interpretations: { type: Type.OBJECT, properties: { focus: { type: Type.STRING }, productivity: { type: Type.STRING }, resilience: { type: Type.STRING } } },
+            recommendations: { type: Type.ARRAY, items: { type: Type.STRING } },
+          }
+        };
+
+        const response = await ai.models.generateContent({
+            model: 'gemini-2.5-flash',
+            contents: prompt,
+            config: {
+                temperature: 0.7,
+                responseMimeType: 'application/json',
+                responseSchema,
+            },
+        });
+        
+        const report = JSON.parse(response.text);
         transaction.status = 'completed';
+        transactions.set(transactionId, transaction);
         res.json(report);
     } catch (error) {
-        console.error('Erro no relatório completo da Gemini:', error);
-        res.status(500).json({ message: 'Erro ao gerar o relatório completo.' });
+        console.error('Gemini full report generation error:', error);
+        res.status(500).json({ message: 'Error generating full report.' });
     }
 });
 
-// --- ROTA "CATCH-ALL" ---
-// Envia o arquivo principal index.html para qualquer requisição que não seja para a API.
-// Essencial para o React funcionar.
-app.get('*', (req, res) => {
-  res.sendFile(path.join(clientBuildPath, 'index.html'));
-});
+if (process.env.NODE_ENV === 'production') {
+    const clientBuildPath = path.join(__dirname, '..', 'client', 'dist');
+    app.use(express.static(clientBuildPath));
+    app.get('*', (req, res) => {
+        res.sendFile(path.join(clientBuildPath, 'index.html'));
+    });
+}
 
 app.listen(port, () => {
-    console.log(`Servidor rodando na porta ${port}`);
+    console.log(`Server listening on port ${port}`);
 });
