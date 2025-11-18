@@ -4,25 +4,27 @@ import Quiz from './pages/Quiz';
 import Report from './pages/Report';
 import { QuizData } from './types';
 import usePersistedState from './hooks/usePersistedState';
+import './index.css';
 
 type Page = 'home' | 'quiz' | 'report';
 
 function App() {
-  const [page, setPage] = useState<Page>('home');
+  // MUDANÇA CRÍTICA: Agora persistimos a página atual. 
+  // Se o usuário for para a Kiwify e voltar, o site lembra que ele estava em 'report'.
+  const [page, setPage] = usePersistedState<Page>('app-current-page', 'home');
   const [quizData, setQuizData] = usePersistedState<QuizData | null>('quizData', null);
   const [transactionId, setTransactionId] = usePersistedState<string | null>('transactionId', null);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    const urlTransactionId = params.get('aff_content');
+    // Kiwify pode retornar parâmetros variados, verificamos alguns comuns ou apenas a presença de params
+    const hasQueryParams = Array.from(params.keys()).length > 0;
 
-    // Se voltou da Kiwify com um ID e temos dados salvos, vá para o relatório no modo loading
-    if (urlTransactionId && quizData) {
-      setTransactionId(urlTransactionId);
+    // Se voltamos com dados salvos e estamos na home, força a ida para o report para verificar pagamento
+    if (hasQueryParams && quizData && page === 'home') {
       setPage('report');
-      window.history.replaceState({}, document.title, window.location.pathname);
     }
-  }, [quizData, setTransactionId]);
+  }, [quizData, page, setPage]);
 
   const handleStartQuiz = () => {
     setQuizData(null);
@@ -30,16 +32,18 @@ function App() {
     setPage('quiz');
   };
 
-  const handleCompleteQuiz = (data: QuizData) => {
-    // Salva os dados e mostra a tela de Report (que estará em modo 'preview' pq não tem transactionId ainda)
-    setQuizData(data);
-    setPage('report');
+  const handleCompleteQuiz = (data: { checkoutUrl: string, quizData: QuizData }) => {
+    setQuizData(data.quizData);
+    setPage('report'); // Garante que estamos na tela de relatório antes de sair
+    window.location.href = data.checkoutUrl;
   };
   
   const handleRestart = () => {
     setQuizData(null);
     setTransactionId(null);
     setPage('home');
+    // Limpa a URL
+    window.history.replaceState({}, document.title, window.location.pathname);
   };
 
   const renderPage = () => {
@@ -47,10 +51,16 @@ function App() {
       case 'quiz':
         return <Quiz onComplete={handleCompleteQuiz} onCancel={handleRestart} />;
       case 'report':
-        // Só renderiza se tiver dados, senão volta pra home
+        // Se temos dados, mostramos o relatório (que vai verificar o pagamento)
         if (quizData) {
-             return <Report transactionId={transactionId || ''} quizData={quizData} onRestart={handleRestart} />;
+          return <Report 
+            transactionId={transactionId || ''} 
+            quizData={quizData} 
+            onRestart={handleRestart} 
+          />;
         }
+        // Se algo deu errado e não temos dados, volta pra home
+        setPage('home');
         return <Home onStartQuiz={handleStartQuiz} />;
       case 'home':
       default:
@@ -59,7 +69,7 @@ function App() {
   };
 
   return (
-    <div className="bg-slate-900 text-gray-200 min-h-screen font-sans">
+    <div className="bg-gray-900 text-gray-200 min-h-screen font-sans">
       {renderPage()}
     </div>
   );
