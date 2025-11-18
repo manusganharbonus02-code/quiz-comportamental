@@ -123,10 +123,12 @@ app.post('/api/generate-report', async (req, res) => {
     }
 });
 
-// SERVIR ARQUIVOS DO CLIENT
-const clientDistPath = path.resolve(__dirname, '..', 'client', 'dist');
+// SERVIR ARQUIVOS DO CLIENT (A PARTE VISUAL)
+// Esta linha diz ao servidor para procurar a pasta 'dist' que o Render vai criar.
+const clientDistPath = path.resolve(__dirname, '..', 'dist');
 app.use(express.static(clientDistPath));
 
+// Se nenhuma rota da API for encontrada, envie o arquivo principal do app para o navegador.
 app.get('*', (req, res) => {
     res.sendFile(path.resolve(clientDistPath, 'index.html'));
 });
