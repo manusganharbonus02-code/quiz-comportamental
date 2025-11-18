@@ -1,65 +1,72 @@
-import React, { useCallback } from 'react';
+import { useEffect, useState } from 'react';
 import Home from './pages/Home';
 import Quiz from './pages/Quiz';
 import Report from './pages/Report';
-import { Answers } from './types';
+import { QuizData } from './types';
 import usePersistedState from './hooks/usePersistedState';
+import './index.css';
 
 type Page = 'home' | 'quiz' | 'report';
 
-interface AppState {
-  page: Page;
-  transactionId: string | null;
-  answers: Answers | null;
-}
-
 function App() {
-  const [state, setState] = usePersistedState<AppState>('quiz-app-state', {
-    page: 'home',
-    transactionId: null,
-    answers: null,
-  });
+  const [page, setPage] = useState<Page>('home');
+  // Salva os dados do quiz na memória do navegador para sobreviver ao redirecionamento
+  const [quizData, setQuizData] = usePersistedState<QuizData | null>('quizData', null);
+  const [transactionId, setTransactionId] = usePersistedState<string | null>('transactionId', null);
 
-  const handleStartQuiz = useCallback(() => {
-    setState({ page: 'quiz', transactionId: null, answers: null });
-  }, [setState]);
+  // Este efeito especial detecta quando o usuário volta da Kiwify
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const urlTransactionId = params.get('aff_content');
 
-  const handleQuizComplete = useCallback((transactionId: string, answers: Answers) => {
-    setState({ page: 'report', transactionId, answers });
-  }, [setState]);
+    if (urlTransactionId && quizData) {
+      setTransactionId(urlTransactionId);
+      setPage('report');
+      // Limpa a URL para que o usuário possa recarregar a página sem problemas
+      window.history.replaceState({}, document.title, window.location.pathname);
+    }
+  }, [quizData, setTransactionId]);
+
+
+  const handleStartQuiz = () => {
+    // Limpa dados antigos antes de começar um novo quiz
+    setQuizData(null);
+    setTransactionId(null);
+    setPage('quiz');
+  };
+
+  const handleCompleteQuiz = (data: { checkoutUrl: string, quizData: QuizData }) => {
+    // Salva os dados do quiz e redireciona para o pagamento
+    setQuizData(data.quizData);
+    window.location.href = data.checkoutUrl;
+  };
   
-  const handleCancelQuiz = useCallback(() => {
-    setState({ page: 'home', transactionId: null, answers: null });
-  }, [setState]);
-
-  const handleRestart = useCallback(() => {
-    // Clear persisted state on restart
-    window.localStorage.removeItem('quiz-app-state');
-    setState({ page: 'home', transactionId: null, answers: null });
-  }, [setState]);
+  const handleRestart = () => {
+    setQuizData(null);
+    setTransactionId(null);
+    setPage('home');
+  };
 
   const renderPage = () => {
-    switch (state.page) {
-      case 'home':
-        return <Home onStartQuiz={handleStartQuiz} />;
+    switch (page) {
       case 'quiz':
-        return <Quiz onComplete={handleQuizComplete} onCancel={handleCancelQuiz} />;
+        return <Quiz onComplete={handleCompleteQuiz} onCancel={handleRestart} />;
       case 'report':
-        if (state.transactionId) {
-          // Pass only transactionId and onRestart. The report page itself will fetch the answers if needed.
-          return <Report transactionId={state.transactionId} onRestart={handleRestart} />;
+        if (transactionId) {
+          return <Report transactionId={transactionId} onRestart={handleRestart} />;
         }
-        // Fallback to home if report is rendered without necessary data
-        handleRestart(); // Clear any inconsistent state
+        // Se chegar aqui sem dados, volta para o início para segurança
+        setPage('home');
         return <Home onStartQuiz={handleStartQuiz} />;
+      case 'home':
       default:
         return <Home onStartQuiz={handleStartQuiz} />;
     }
   };
 
   return (
-    <div className="dark min-h-screen font-sans text-dark-text bg-dark-bg">
-      <main>{renderPage()}</main>
+    <div className="bg-gray-900 text-gray-200 min-h-screen font-sans">
+      {renderPage()}
     </div>
   );
 }
