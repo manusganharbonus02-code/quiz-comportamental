@@ -23,24 +23,30 @@ app.use(express.urlencoded({ extended: true }));
 const transactions = new Map();
 
 async function generateReport(scores) {
-  // Prompt atualizado para ser altamente persuasivo e valioso
-  const prompt = `Você é um Coach Executivo de elite e especialista em comportamento humano. O usuário acabou de pagar por este relatório e espera uma transformação.
+  // PROMPT DE ALTA PERFORMANCE: CRIADO PARA GERAR VALOR E PERSUASÃO
+  const prompt = `
+  ATUE COMO: Um Especialista Sênior em Análise Comportamental e Coach de Carreira de Executivos.
   
-  DADOS DO USUÁRIO (0-100):
+  CONTEXTO: O usuário acabou de realizar um investimento financeiro para receber esta análise. O relatório DEVE ser surpreendente, profundo, técnico e extremamente útil. Não use clichês.
+
+  DADOS DO PERFIL (0-100):
   - Foco: ${scores.Foco}
   - Adaptabilidade: ${scores.Adaptabilidade}
   - Inovação: ${scores.AgressorRotina}
   - Coragem: ${scores.MatadorDragoes}
   - Inteligência Social: ${scores.RadarSocial}
 
-  SUA MISSÃO:
-  Gere um relatório JSON que seja profundo, impactante e personalizado.
-  1. No "archetypeTitle", dê um nome poderoso para o perfil dele (ex: "O Arquiteto Visionário", "A Força Tática").
-  2. Na "archetypeDescription", escreva um texto que faça o usuário se sentir compreendido profundamente. Use linguagem persuasiva ("Você é do tipo que...", "Seu superpoder oculto é...").
-  3. Nas análises ("interpretation"), não seja genérico. Mostre as consequências reais do comportamento dele no trabalho e na vida.
-  4. Nas recomendações, dê conselhos de carreira "ouro em pó". Coisas que ele pode fazer amanhã para ganhar mais ou ser promovido.
+  ESTRUTURA OBRIGATÓRIA DO JSON:
+  
+  1. **archetypeTitle**: Crie um título de Arquétipo impactante e único (ex: "O Estrategista Imparável", "O Arquiteto de Mudanças").
+  2. **archetypeDescription**: Um resumo executivo poderoso. Comece validando a identidade dele ("Você é alguém que..."). Destaque o valor único dele no mercado.
+  3. **dimensionAnalyses** (Para cada uma das 5 dimensões):
+     - **interpretation**: Uma análise técnica. Se a nota for baixa, explique o risco (Ponto Negativo/Cego). Se for alta, explique a vantagem (Ponto Positivo). Seja direto e realista.
+     - **strengths**: Liste 2 "Superpoderes" dessa dimensão. O que ele faz melhor que a média?
+     - **recommendations**: Liste 2 ações táticas imediatas. Uma para mitigar o ponto fraco e outra para alavancar o ponto forte.
 
-  Gere estritamente no formato JSON solicitado.`;
+  TOM DE VOZ: Profissional, Perspicaz, Encorajador, mas "Duro na queda" quando necessário (aponte as falhas como oportunidades de lucro/crescimento).
+  `;
 
   const schema = {
     type: Type.OBJECT,
@@ -96,11 +102,14 @@ app.post('/api/start-checkout', (req, res) => {
 app.post('/api/kiwify-webhook', (req, res) => {
   const data = req.body;
   const transactionId = data?.aff_content;
-  // Aceita 'paid' ou 'approved' para garantir
-  if (transactionId && (data?.order_status === 'paid' || data?.status === 'paid') && transactions.has(transactionId)) {
-    const t = transactions.get(transactionId);
-    t.status = 'PAID';
-    console.log(`Pagamento confirmado para: ${transactionId}`);
+  if (transactionId && (data?.order_status === 'paid' || data?.status === 'paid')) {
+    // Procura a transação ou cria um placeholder se o servidor tiver reiniciado
+    if (transactions.has(transactionId)) {
+        transactions.get(transactionId).status = 'PAID';
+    } else {
+        // Armazena que foi pago, para quando o cliente voltar com os dados
+        transactions.set(transactionId, { status: 'PAID', report: null, answers: null, questions: null });
+    }
   }
   res.sendStatus(200);
 });
@@ -110,31 +119,38 @@ app.post('/api/get-report', async (req, res) => {
   
   let transaction = transactions.get(transactionId);
   
-  // Recuperação de falha: Se o servidor reiniciou, recria a transação com os dados que o frontend enviou de volta
+  // Lógica de Recuperação Robusta
   if (!transaction) {
     if (answers && questions) {
-       console.log(`[Recuperação] Recriando transação ${transactionId}.`);
+       // Cliente trouxe os dados. Criamos a transação e assumimos pago (confiança no fluxo UX)
+       console.log(`[Recuperação] Restaurando sessão ${transactionId}.`);
        transaction = { status: 'PAID', report: null, answers, questions };
        transactions.set(transactionId, transaction);
     } else {
-       return res.status(404).json({ message: 'Transação não encontrada.' });
+       return res.status(404).json({ message: 'Sessão expirada.' });
     }
+  } else {
+      // Se a transação existe mas estava sem dados (veio do webhook antes), preenchemos agora
+      if (!transaction.answers && answers) transaction.answers = answers;
+      if (!transaction.questions && questions) transaction.questions = questions;
   }
 
-  // Força status PAGO se o cliente já voltou da Kiwify (Confiança no fluxo do frontend para UX)
+  // UX: Se o cliente está aqui pedindo o relatório, assumimos que o pagamento ocorreu 
+  // (ou que ele clicou em voltar). A verificação real seria via banco de dados em prod.
+  // Aqui priorizamos a entrega do valor.
   if (transaction.status !== 'PAID') transaction.status = 'PAID';
 
   if (transaction.report) return res.status(200).json(transaction.report);
 
   try {
     const scores = calculateScores(transaction.answers, transaction.questions);
-    if (!scores) return res.status(400).json({ message: 'Erro no cálculo.' });
+    if (!scores) return res.status(400).json({ message: 'Erro cálculo.' });
     
     const report = await generateReport(scores);
     transaction.report = report;
     res.status(200).json(report);
   } catch (error) {
-    res.status(500).json({ message: 'Erro ao gerar relatório.' });
+    res.status(500).json({ message: 'Erro IA.' });
   }
 });
 
