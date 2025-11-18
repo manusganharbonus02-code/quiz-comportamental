@@ -1,13 +1,25 @@
 {
   "name": "quiz-comportamental-fullstack",
-  "version": "1.0.0",
   "private": true,
-  "description": "Aplicativo Fullstack para Quiz Comportamental com Backend Gemini AI e Frontend React.",
-  "main": "backend/server.js",
+  "version": "1.0.0",
+  "type": "module",
   "scripts": {
-    "build": "npm install --prefix backend",
-    "start": "node backend/server.js"
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "start": "npm --prefix server start"
   },
-  "author": "",
-  "license": "ISC"
+  "dependencies": {
+    "lucide-react": "^0.379.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "recharts": "^2.12.7"
+  },
+  "devDependencies": {
+    "@types/react": "^18.2.66",
+    "@types/react-dom": "^18.2.22",
+    "@vitejs/plugin-react": "^4.2.1",
+    "typescript": "^5.2.2",
+    "vite": "^5.2.0"
+  }
 }
