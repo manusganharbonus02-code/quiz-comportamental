@@ -1,16 +1,15 @@
 {
-  "name": "quiz-server",
+  "name": "quiz-comportamental-monorepo",
+  "private": true,
   "version": "1.0.0",
-  "description": "Servidor para o Quiz Comportamental",
-  "main": "server.js",
-  "type": "module",
   "scripts": {
-    "start": "node server.js"
+    "dev": "concurrently \"npm:dev-client\" \"npm:dev-server\"",
+    "dev-client": "npm --prefix client run dev",
+    "dev-server": "npm --prefix server start",
+    "build": "npm --prefix client run build",
+    "postinstall": "npm install --prefix client && npm install --prefix server"
   },
-  "dependencies": {
-    "@google/genai": "^1.29.1",
-    "cors": "^2.8.5",
-    "express": "^4.19.2",
-    "uuid": "^9.0.1"
+  "devDependencies": {
+    "concurrently": "^8.2.2"
   }
 }
