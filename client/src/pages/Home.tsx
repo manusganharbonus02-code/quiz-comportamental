@@ -1,4 +1,3 @@
-import React from 'react';
 import { Button } from '../components/ui/Button';
 import { Card, CardContent } from '../components/ui/Card';
 import { Zap, TrendingUp, Award } from 'lucide-react';
@@ -84,8 +83,8 @@ export default function Home({ onStartQuiz }: HomeProps) {
             {[
               { num: 1, title: "Responda", desc: "Responda 25 perguntas sobre seu comportamento no trabalho." },
               { num: 2, title: "Veja a Prévia", desc: "Receba uma amostra intrigante da sua análise gerada por IA." },
-              { num: 3, "title": "Desbloqueie", "desc": "Faça o pagamento seguro para acessar seu relatório completo." },
-              { num: 4, "title": "Analise", "desc": "Receba seus resultados com gráficos e recomendações detalhadas." },
+              { num: 3, title: "Desbloqueie", desc: "Faça o pagamento seguro para acessar seu relatório completo." },
+              { num: 4, title: "Analise", desc: "Receba seus resultados com gráficos e recomendações detalhadas." },
             ].map((step) => (
               <div key={step.num} className="text-center relative">
                 <div className="w-16 h-16 rounded-full bg-amber-500 text-slate-900 flex items-center justify-center text-2xl font-bold mx-auto mb-4 ring-8 ring-amber-500/20">
