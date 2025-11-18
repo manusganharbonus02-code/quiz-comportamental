@@ -16,6 +16,7 @@ function App() {
     const params = new URLSearchParams(window.location.search);
     const urlTransactionId = params.get('aff_content');
 
+    // Se voltou da Kiwify com um ID e temos dados salvos, vá para o relatório no modo loading
     if (urlTransactionId && quizData) {
       setTransactionId(urlTransactionId);
       setPage('report');
@@ -23,16 +24,16 @@ function App() {
     }
   }, [quizData, setTransactionId]);
 
-
   const handleStartQuiz = () => {
     setQuizData(null);
     setTransactionId(null);
     setPage('quiz');
   };
 
-  const handleCompleteQuiz = (data: { checkoutUrl: string, quizData: QuizData }) => {
-    setQuizData(data.quizData);
-    window.location.href = data.checkoutUrl;
+  const handleCompleteQuiz = (data: QuizData) => {
+    // Salva os dados e mostra a tela de Report (que estará em modo 'preview' pq não tem transactionId ainda)
+    setQuizData(data);
+    setPage('report');
   };
   
   const handleRestart = () => {
@@ -46,10 +47,10 @@ function App() {
       case 'quiz':
         return <Quiz onComplete={handleCompleteQuiz} onCancel={handleRestart} />;
       case 'report':
-        if (transactionId) {
-          return <Report transactionId={transactionId} onRestart={handleRestart} />;
+        // Só renderiza se tiver dados, senão volta pra home
+        if (quizData) {
+             return <Report transactionId={transactionId || ''} quizData={quizData} onRestart={handleRestart} />;
         }
-        setPage('home');
         return <Home onStartQuiz={handleStartQuiz} />;
       case 'home':
       default:
@@ -58,7 +59,7 @@ function App() {
   };
 
   return (
-    <div className="bg-gray-900 text-gray-200 min-h-screen font-sans">
+    <div className="bg-slate-900 text-gray-200 min-h-screen font-sans">
       {renderPage()}
     </div>
   );
