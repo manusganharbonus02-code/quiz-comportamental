@@ -1,7 +1,6 @@
-import { QuizData, ReportData } from '../types';
+import { Answers, ReportData, QuizQuestion } from '../types';
 
-// O caminho relativo '/api' funciona tanto em desenvolvimento quanto em produção no Render,
-// pois o cliente e o servidor estarão no mesmo domínio.
+// CORREÇÃO: Usar caminho relativo para funcionar tanto localmente quanto no Render
 const API_BASE_URL = '/api';
 
 /**
@@ -9,7 +8,7 @@ const API_BASE_URL = '/api';
  * @param quizData - Os dados do quiz (respostas e perguntas).
  * @returns O ID da transação e a URL de checkout.
  */
-export const startCheckout = async (quizData: QuizData): Promise<{ transactionId: string, checkoutUrl: string }> => {
+export const startCheckout = async (quizData: { answers: Answers, questions: QuizQuestion[] }): Promise<{ transactionId: string, checkoutUrl: string }> => {
   console.log('Iniciando checkout com o backend...');
   const response = await fetch(`${API_BASE_URL}/start-checkout`, {
     method: 'POST',
