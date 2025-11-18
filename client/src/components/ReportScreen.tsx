@@ -1,7 +1,7 @@
 import { ReportData } from '../types';
 import { Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, ResponsiveContainer, Legend, Tooltip } from 'recharts';
 import { Button } from './ui/Button';
-import { Home, Download } from 'lucide-react';
+import { Home, Download, Zap, Target, BookOpen } from 'lucide-react';
 import { Card } from './ui/Card';
 
 interface ReportScreenProps {
@@ -10,21 +10,19 @@ interface ReportScreenProps {
 }
 
 const DIMENSION_DISPLAY_NAMES: Record<string, string> = {
-  Foco: "Foco",
+  Foco: "Foco & Disciplina",
   Adaptabilidade: "Adaptabilidade",
-  AgressorRotina: "Inovação",
-  MatadorDragoes: "Coragem",
-  RadarSocial: "Radar Social",
+  AgressorRotina: "Inovação & Criatividade",
+  MatadorDragoes: "Coragem & Liderança",
+  RadarSocial: "Inteligência Social",
 };
 
 export function ReportScreen({ reportData, onRestart }: ReportScreenProps) {
-  // Verificação de segurança: Se os dados do relatório estiverem mal formados, mostre uma tela de erro em vez de quebrar.
-  if (!reportData || !Array.isArray(reportData.dimensionAnalyses) || reportData.dimensionAnalyses.some(d => !d)) {
+  if (!reportData || !Array.isArray(reportData.dimensionAnalyses)) {
     return (
         <div className="flex flex-col h-full items-center justify-center p-6 text-center">
-            <h1 className="text-2xl font-bold text-red-500">Erro de Dados do Relatório</h1>
-            <p className="text-gray-400 mt-4">Os dados recebidos para o seu relatório parecem estar corrompidos. Por favor, reinicie o teste para tentar novamente.</p>
-            <Button onClick={onRestart} className="mt-6">Fazer um Novo Teste</Button>
+            <h1 className="text-2xl font-bold text-red-500">Erro nos Dados</h1>
+            <Button onClick={onRestart} className="mt-6">Reiniciar</Button>
         </div>
     );
   }
@@ -36,76 +34,110 @@ export function ReportScreen({ reportData, onRestart }: ReportScreenProps) {
   }));
 
   return (
-    <div className="flex flex-col min-h-screen animate-fade-in">
-        <header className="p-4 text-center bg-gray-800/50">
-            <h1 className="text-xl font-bold text-gray-100">Seu Relatório Comportamental</h1>
+    <div className="flex flex-col min-h-screen animate-fade-in bg-slate-950">
+        <header className="p-6 text-center bg-slate-900 border-b border-slate-800 sticky top-0 z-20">
+            <h1 className="text-xl md:text-2xl font-bold text-gray-100">Relatório de Perfil Executivo</h1>
         </header>
 
-        <main className="flex-grow p-4 sm:p-6 lg:p-8 overflow-y-auto space-y-6 max-w-4xl mx-auto w-full">
-            <Card className="bg-gray-800/60 border border-teal-500/30 p-6 text-center shadow-lg">
-                <h2 className="text-3xl font-extrabold text-teal-400">
+        <main className="flex-grow p-4 sm:p-6 lg:p-8 space-y-8 max-w-5xl mx-auto w-full">
+            
+            {/* Arquétipo Principal */}
+            <Card className="bg-gradient-to-br from-slate-800 to-slate-900 border-amber-500/40 p-8 text-center shadow-2xl relative overflow-hidden">
+                <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-amber-500 to-orange-600"></div>
+                <h2 className="text-sm font-bold text-amber-500 uppercase tracking-widest mb-2">Seu Arquétipo Dominante</h2>
+                <h3 className="text-3xl md:text-5xl font-extrabold text-white mb-6 tracking-tight">
                     {reportData.archetypeTitle}
-                </h2>
-                <p className="text-gray-300 mt-2 max-w-2xl mx-auto">
-                    {reportData.archetypeDescription}
+                </h3>
+                <p className="text-gray-300 text-lg md:text-xl leading-relaxed max-w-3xl mx-auto border-l-4 border-amber-500 pl-6 text-left italic">
+                    "{reportData.archetypeDescription}"
                 </p>
             </Card>
 
-            <Card className="bg-gray-800/60 border border-gray-700 p-4">
-                <h3 className="text-lg font-bold text-center mb-4 text-gray-100">Seu Perfil em Gráfico</h3>
-                <ResponsiveContainer width="100%" height={300}>
-                    <RadarChart cx="50%" cy="50%" outerRadius="80%" data={chartData}>
-                        <PolarGrid stroke="#374151" />
-                        <PolarAngleAxis dataKey="subject" tick={{ fill: '#e0f2f1', fontSize: 12 }} />
-                        <PolarRadiusAxis angle={30} domain={[0, 100]} tick={{ fill: '#9ca3af' }} />
-                        <Radar name="Score" dataKey="A" stroke="#2dd4bf" fill="#2dd4bf" fillOpacity={0.6} />
-                        <Tooltip contentStyle={{ backgroundColor: '#1f2937', border: '1px solid #374151' }} />
-                        <Legend />
-                    </RadarChart>
-                </ResponsiveContainer>
-            </Card>
-
-            {reportData.dimensionAnalyses.map((analysis) => (
-                <Card key={analysis.dimensionName} className="bg-gray-800/60 border border-gray-700 p-4">
-                    <div className="flex justify-between items-center mb-2">
-                        <h4 className="text-md font-bold text-gray-200">
-                            {DIMENSION_DISPLAY_NAMES[analysis.dimensionName] || analysis.dimensionName}
-                        </h4>
-                        <span className="font-bold text-lg text-teal-400">
-                            {analysis.score}%
-                        </span>
+            {/* Gráfico */}
+            <div className="grid md:grid-cols-3 gap-8">
+                <Card className="md:col-span-1 bg-slate-900 border-slate-800 p-4 flex flex-col justify-center">
+                    <h4 className="text-center font-bold text-gray-400 mb-4">Mapeamento de Competências</h4>
+                    <div className="h-64 w-full">
+                        <ResponsiveContainer width="100%" height="100%">
+                            <RadarChart cx="50%" cy="50%" outerRadius="70%" data={chartData}>
+                                <PolarGrid stroke="#334155" />
+                                <PolarAngleAxis dataKey="subject" tick={{ fill: '#94a3b8', fontSize: 10 }} />
+                                <PolarRadiusAxis angle={30} domain={[0, 100]} tick={false} axisLine={false} />
+                                <Radar name="Você" dataKey="A" stroke="#f59e0b" fill="#f59e0b" fillOpacity={0.3} />
+                                <Tooltip contentStyle={{ backgroundColor: '#0f172a', border: '1px solid #334155', color: '#fff' }} />
+                            </RadarChart>
+                        </ResponsiveContainer>
                     </div>
-                    <div className="w-full bg-gray-700 rounded-full h-2 mb-3">
-                        <div className="bg-teal-500 h-2 rounded-full" style={{ width: `${analysis.score}%` }}></div>
-                    </div>
-                    <p className="text-sm text-gray-400 mb-3">{analysis.interpretation}</p>
-
-                    {(analysis.strengths?.length > 0 || analysis.recommendations?.length > 0) && (
-                        <div className="border-t border-gray-700 pt-3 mt-3 space-y-4">
-                            {analysis.strengths?.length > 0 && (
-                                <div>
-                                    <h5 className="text-sm font-semibold mb-2 text-green-400">✨ Pontos Fortes</h5>
-                                    <ul className="list-disc list-inside space-y-1 text-sm text-gray-300">
-                                        {analysis.strengths.map((strength, i) => <li key={i}>{strength}</li>)}
-                                    </ul>
-                                </div>
-                            )}
-                            {analysis.recommendations?.length > 0 && (
-                                <div>
-                                    <h5 className="text-sm font-semibold mb-2 text-yellow-400">🚀 Recomendações de Desenvolvimento</h5>
-                                    <ul className="list-disc list-inside space-y-1 text-sm text-gray-300">
-                                        {analysis.recommendations.map((rec, i) => <li key={i}>{rec}</li>)}
-                                    </ul>
-                                </div>
-                            )}
-                        </div>
-                    )}
                 </Card>
-            ))}
 
-             <div className="flex flex-col sm:flex-row gap-4 justify-center pt-4">
-                <Button variant="outline" onClick={() => window.print()}><Download className="w-4 h-4 mr-2" /> Salvar como PDF</Button>
-                <Button onClick={onRestart} variant="ghost"><Home className="w-4 h-4 mr-2" /> Fazer Novo Teste</Button>
+                {/* Detalhamento das Dimensões */}
+                <div className="md:col-span-2 space-y-6">
+                    {reportData.dimensionAnalyses.map((analysis) => (
+                        <Card key={analysis.dimensionName} className="bg-slate-900/80 border border-slate-700 overflow-hidden transition-all hover:border-slate-600">
+                            <div className="p-6">
+                                <div className="flex justify-between items-center mb-4">
+                                    <h4 className="text-xl font-bold text-white flex items-center gap-2">
+                                        <Target className="w-5 h-5 text-amber-500" />
+                                        {DIMENSION_DISPLAY_NAMES[analysis.dimensionName] || analysis.dimensionName}
+                                    </h4>
+                                    <div className="flex items-center gap-2 bg-slate-800 px-3 py-1 rounded-full">
+                                        <span className={`font-bold text-lg ${analysis.score > 70 ? 'text-green-400' : analysis.score < 40 ? 'text-red-400' : 'text-yellow-400'}`}>
+                                            {analysis.score}
+                                        </span>
+                                        <span className="text-xs text-slate-500">/100</span>
+                                    </div>
+                                </div>
+                                
+                                <div className="w-full bg-slate-800 rounded-full h-1.5 mb-4">
+                                    <div 
+                                        className={`h-1.5 rounded-full transition-all duration-1000 ${analysis.score > 70 ? 'bg-green-500' : analysis.score < 40 ? 'bg-red-500' : 'bg-yellow-500'}`} 
+                                        style={{ width: `${analysis.score}%` }}
+                                    ></div>
+                                </div>
+
+                                <p className="text-gray-300 mb-6 leading-relaxed text-sm md:text-base">
+                                    {analysis.interpretation}
+                                </p>
+
+                                <div className="grid md:grid-cols-2 gap-6">
+                                    <div className="bg-slate-800/50 rounded-lg p-4 border border-slate-700/50">
+                                        <h5 className="text-sm font-bold text-green-400 mb-3 flex items-center gap-2">
+                                            <Zap className="w-4 h-4" /> Superpoderes (Pontos Fortes)
+                                        </h5>
+                                        <ul className="space-y-2">
+                                            {analysis.strengths.map((strength, i) => (
+                                                <li key={i} className="text-sm text-slate-300 flex items-start gap-2">
+                                                    <span className="text-green-500 mt-1">•</span> {strength}
+                                                </li>
+                                            ))}
+                                        </ul>
+                                    </div>
+                                    <div className="bg-slate-800/50 rounded-lg p-4 border border-slate-700/50">
+                                        <h5 className="text-sm font-bold text-blue-400 mb-3 flex items-center gap-2">
+                                            <BookOpen className="w-4 h-4" /> Plano de Ação (Melhorias)
+                                        </h5>
+                                        <ul className="space-y-2">
+                                            {analysis.recommendations.map((rec, i) => (
+                                                <li key={i} className="text-sm text-slate-300 flex items-start gap-2">
+                                                    <span className="text-blue-500 mt-1">→</span> {rec}
+                                                </li>
+                                            ))}
+                                        </ul>
+                                    </div>
+                                </div>
+                            </div>
+                        </Card>
+                    ))}
+                </div>
+            </div>
+
+             <div className="flex flex-col sm:flex-row gap-4 justify-center pt-8 pb-12">
+                <Button variant="outline" onClick={() => window.print()} className="border-slate-600 hover:bg-slate-800 text-white">
+                    <Download className="w-4 h-4 mr-2" /> Salvar PDF
+                </Button>
+                <Button onClick={onRestart} variant="ghost" className="text-slate-400 hover:text-white">
+                    <Home className="w-4 h-4 mr-2" /> Nova Avaliação
+                </Button>
             </div>
         </main>
     </div>
