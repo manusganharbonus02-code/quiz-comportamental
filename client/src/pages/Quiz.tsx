@@ -19,7 +19,6 @@ const ANSWER_OPTIONS = [
     { value: 5, label: "Concordo Totalmente" },
 ];
 
-// Mapeia os nomes internos para nomes amigáveis na tela
 const DIMENSION_NAMES: Record<string, string> = {
   Foco: "Foco",
   Adaptabilidade: "Adaptabilidade",
@@ -69,9 +68,8 @@ export default function QuizPage({ onComplete, onCancel }: QuizPageProps) {
     setIsSubmitting(true);
     try {
       const quizData = { questions: quizQuestions, answers };
-      // Chama a nova função para iniciar o checkout
+      // ATENÇÃO: Aqui chamamos a função correta 'startCheckout'
       const { checkoutUrl } = await startCheckout(quizData);
-      // Passa a URL e os dados do quiz para o App.tsx
       onComplete({ checkoutUrl, quizData });
     } catch (err: any) {
       setError(err.message || "Ocorreu um erro ao enviar suas respostas. Tente novamente.");
