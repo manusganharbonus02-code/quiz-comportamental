@@ -9,7 +9,6 @@ import { ReportData, Answers, QuizQuestion } from "../types";
 
 ChartJS.register(RadialLinearScale, PointElement, LineElement, Filler, Tooltip, Legend);
 
-// SEU LINK DE CHECKOUT
 const KIWIFY_CHECKOUT_URL = 'https://pay.kiwify.com.br/RHpnrVL';
 
 interface ReportPageProps {
@@ -25,20 +24,14 @@ export default function ReportPage({ transactionId, answers, questions, onRestar
   const [previewText, setPreviewText] = useState("");
   const [isLoadingPreview, setIsLoadingPreview] = useState(true);
   const [countdown, setCountdown] = useState(3);
+  const [errorMessage, setErrorMessage] = useState("");
 
-  // Inicia o fluxo de pagamento
   const handleUnlockReport = () => {
-    // Adiciona o ID da transação na URL da Kiwify para o webhook funcionar
     const checkoutUrl = `${KIWIFY_CHECKOUT_URL}?aff_content=${transactionId}`;
     window.open(checkoutUrl, '_blank');
-    
-    // Em produção, comente a linha abaixo se quiser testar apenas com pagamento real
-    // simulateSuccessfulPayment(transactionId); 
-    
     setPaymentStage('waiting');
   };
 
-  // Busca a prévia assim que a tela carrega
   useEffect(() => {
     if (paymentStage === 'preview' && !previewText) {
         fetchReportPreview(answers, questions)
@@ -51,7 +44,6 @@ export default function ReportPage({ transactionId, answers, questions, onRestar
     }
   }, [paymentStage, answers, questions, previewText]);
 
-  // Polling para verificar pagamento
   const verifyPayment = useCallback(async () => {
     try {
       const response = await checkPaymentStatus(transactionId);
@@ -66,13 +58,12 @@ export default function ReportPage({ transactionId, answers, questions, onRestar
   useEffect(() => {
     let interval: ReturnType<typeof setInterval>;
     if (paymentStage === 'waiting') {
-      verifyPayment(); // Checa imediatamente
-      interval = setInterval(verifyPayment, 3000); // Checa a cada 3s
+      verifyPayment();
+      interval = setInterval(verifyPayment, 3000);
     }
     return () => clearInterval(interval);
   }, [paymentStage, verifyPayment]);
 
-  // Efeito visual do countdown na tela de espera
   useEffect(() => {
       let int: ReturnType<typeof setInterval>;
       if(paymentStage === 'waiting') {
@@ -82,16 +73,18 @@ export default function ReportPage({ transactionId, answers, questions, onRestar
       return () => clearInterval(int);
   }, [paymentStage]);
 
-  // Busca o relatório final após sucesso
   useEffect(() => {
     if (paymentStage === 'success' && !reportData) {
         fetchReportData(transactionId)
             .then(data => setReportData(data))
-            .catch(() => setPaymentStage('error'));
+            .catch((err) => {
+                console.error("Erro report:", err);
+                setErrorMessage("Erro ao carregar relatório.");
+                setPaymentStage('error');
+            });
     }
   }, [paymentStage, reportData, transactionId]);
 
-  // Configuração do Gráfico
   const radarData = {
     labels: ["Foco", "Produtividade", "Resiliência"],
     datasets: [{
@@ -104,9 +97,6 @@ export default function ReportPage({ transactionId, answers, questions, onRestar
     }],
   };
 
-  // --- RENDERIZADORES ---
-
-  // 1. TELA DE PRÉVIA (O GANCHO)
   const renderPreview = () => (
     <div className="max-w-3xl mx-auto space-y-8">
         <div className="text-center space-y-4">
@@ -132,7 +122,6 @@ export default function ReportPage({ transactionId, answers, questions, onRestar
                         "{previewText}"
                     </div>
                     
-                    {/* O EFEITO BLUR "MANIPULADOR" */}
                     <div className="relative mt-8 rounded-xl border border-slate-700 bg-slate-900/50 p-6">
                         <div className="absolute inset-0 backdrop-blur-md bg-slate-900/60 z-10 flex flex-col items-center justify-center rounded-xl">
                             <Lock className="w-12 h-12 text-gray-400 mb-3" />
@@ -157,7 +146,6 @@ export default function ReportPage({ transactionId, answers, questions, onRestar
     </div>
   );
 
-  // 2. TELA DE ESPERA (AGUARDANDO PAGAMENTO)
   const renderWaiting = () => (
     <div className="max-w-md mx-auto text-center space-y-8">
         <Card className="border-amber-500/20">
@@ -179,8 +167,7 @@ export default function ReportPage({ transactionId, answers, questions, onRestar
     </div>
   );
 
-  // 3. RELATÓRIO FINAL (A ENTREGA)
-  const renderReport = () => (
+  const renderReportContent = () => (
     <div className="space-y-8 animate-fade-in">
         <header className="text-center space-y-2">
             <div className="inline-flex items-center gap-2 px-4 py-1 rounded-full bg-green-500/10 text-green-400 border border-green-500/20 mb-4">
@@ -192,71 +179,67 @@ export default function ReportPage({ transactionId, answers, questions, onRestar
 
         <div className="grid md:grid-cols-2 gap-8">
             <Card>
-                <CardHeader><CardTitle>Visão Geral Gráfica</CardTitle></CardHeader>
+                <CardHeader><CardTitle>Mapa de Competências</CardTitle></CardHeader>
                 <CardContent className="flex items-center justify-center h-80">
                     <Radar data={radarData} options={{ scales: { r: { grid: { color: '#334155' }, ticks: { display: false }, pointLabels: { color: '#94a3b8', font: { size: 12 } } } }, plugins: { legend: { display: false } } }} />
                 </CardContent>
             </Card>
 
             <div className="space-y-4">
-                {/* FOCO */}
                 <Card className="border-l-4 border-l-blue-500">
                     <CardHeader className="pb-2"><CardTitle className="text-blue-400 flex justify-between"><span>Foco</span> <span className="text-white">{reportData?.scores.Foco.toFixed(1)}/5.0</span></CardTitle></CardHeader>
                     <CardContent><p className="text-gray-300 leading-relaxed">{reportData?.interpretations.Foco}</p></CardContent>
                 </Card>
-                 {/* PRODUTIVIDADE */}
                  <Card className="border-l-4 border-l-amber-500">
                     <CardHeader className="pb-2"><CardTitle className="text-amber-400 flex justify-between"><span>Produtividade</span> <span className="text-white">{reportData?.scores.Produtividade.toFixed(1)}/5.0</span></CardTitle></CardHeader>
                     <CardContent><p className="text-gray-300 leading-relaxed">{reportData?.interpretations.Produtividade}</p></CardContent>
                 </Card>
-                 {/* RESILIENCIA */}
                  <Card className="border-l-4 border-l-purple-500">
                     <CardHeader className="pb-2"><CardTitle className="text-purple-400 flex justify-between"><span>Resiliência</span> <span className="text-white">{reportData?.scores.Resiliência.toFixed(1)}/5.0</span></CardTitle></CardHeader>
                     <CardContent><p className="text-gray-300 leading-relaxed">{reportData?.interpretations.Resiliência}</p></CardContent>
                 </Card>
             </div>
-
-            <Card>
-                <CardHeader><CardTitle className="flex items-center gap-2"><Award className="text-yellow-500"/> Plano de Ação Personalizado</CardTitle></CardHeader>
-                <CardContent>
-                    <ul className="grid gap-4 sm:grid-cols-2">
-                        {reportData?.recommendations.map((rec, i) => (
-                            <li key={i} className="flex gap-4 bg-slate-800/50 p-4 rounded-lg border border-slate-700/50">
-                                <div className="flex-shrink-0 w-8 h-8 rounded-full bg-amber-500/20 flex items-center justify-center text-amber-500 font-bold">{i+1}</div>
-                                <span className="text-gray-300">{rec}</span>
-                            </li>
-                        ))}
-                    </ul>
-                </CardContent>
-            </Card>
-
-            <div className="flex justify-center gap-4">
-                <Button variant="outline" onClick={() => window.print()}><Download className="mr-2 w-4 h-4"/> Salvar PDF</Button>
-                <Button variant="ghost" onClick={onRestart}>Sair</Button>
-            </div>
         </div>
-    );
-  }
 
- const renderError = () => (
+        <Card className="bg-gradient-to-br from-slate-800 to-slate-900 border-slate-700">
+            <CardHeader><CardTitle className="flex items-center gap-2"><Award className="text-yellow-500"/> Plano de Ação Personalizado</CardTitle></CardHeader>
+            <CardContent>
+                <ul className="grid gap-4 sm:grid-cols-2">
+                    {reportData?.recommendations.map((rec, i) => (
+                        <li key={i} className="flex gap-4 bg-slate-800/50 p-4 rounded-lg border border-slate-700/50">
+                            <div className="flex-shrink-0 w-8 h-8 rounded-full bg-amber-500/20 flex items-center justify-center text-amber-500 font-bold">{i+1}</div>
+                            <span className="text-gray-300">{rec}</span>
+                        </li>
+                    ))}
+                </ul>
+            </CardContent>
+        </Card>
+
+        <div className="flex justify-center gap-4">
+            <Button variant="outline" onClick={() => window.print()}><Download className="mr-2 w-4 h-4"/> Salvar PDF</Button>
+            <Button variant="ghost" onClick={onRestart}>Sair</Button>
+        </div>
+    </div>
+  );
+
+  const renderError = () => (
     <div className="max-w-md mx-auto text-center">
         <Card className="border-red-500/50">
             <CardContent className="pt-8">
                 <AlertCircle className="w-16 h-16 text-red-500 mx-auto mb-6" />
                 <h2 className="text-2xl font-bold text-gray-100 mb-2">Ocorreu um Erro</h2>
                 <p className="text-gray-400">{errorMessage}</p>
-                 <Button onClick={() => setPaymentStage('selection')} className="mt-6">Tentar Novamente</Button>
+                 <Button onClick={() => setPaymentStage('waiting')} className="mt-6">Tentar Novamente</Button>
             </CardContent>
         </Card>
     </div>
- )
+  );
 
   return (
     <div className="min-h-screen bg-slate-900 p-4 sm:p-8 flex items-center justify-center">
-      <div key={paymentStage} className="w-full max-w-4xl animate-fade-in">
+      <div className="w-full max-w-4xl animate-fade-in">
         {paymentStage === 'preview' && renderPreview()}
-        {paymentStage === 'selection' && renderPaymentSelection()}
-        {paymentStage === 'waiting' && renderPaymentWaiting()}
+        {paymentStage === 'waiting' && renderWaiting()}
         {paymentStage === 'success' && renderReportContent()}
         {paymentStage === 'error' && renderError()}
       </div>
