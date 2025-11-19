@@ -14,23 +14,17 @@ function App() {
   const [transactionId, setTransactionId] = useState<string | null>(null);
 
   useEffect(() => {
-    // 1. Tenta recuperar da URL (caso o webhook/link direto funcione)
     const params = new URLSearchParams(window.location.search);
     const urlTid = params.get('tid') || params.get('transactionId') || params.get('aff_content');
-    
-    // 2. Tenta recuperar da Memória do Navegador (Salvaguarda)
     const localTid = localStorage.getItem('apex_transaction_id');
 
     if (urlTid) {
-      console.log("[APP] ID via URL:", urlTid);
       setTransactionId(urlTid);
-      localStorage.setItem('apex_transaction_id', urlTid); // Atualiza local
+      localStorage.setItem('apex_transaction_id', urlTid);
       setView('full_report');
     } else if (localTid) {
-      console.log("[APP] ID via LocalStorage:", localTid);
+      // Se tem ID salvo, tenta mostrar o relatório
       setTransactionId(localTid);
-      // Se tem ID salvo, assume que ele foi pagar e voltou. 
-      // O componente ReportFull vai verificar se o pagamento foi aprovado.
       setView('full_report'); 
     }
   }, []);
@@ -38,30 +32,26 @@ function App() {
   const handleStartQuiz = () => setView('quiz');
 
   const handleQuizComplete = (tid: string) => {
-    console.log("Quiz finalizado. ID:", tid);
     setTransactionId(tid);
-    // Salva no navegador para não perder se o usuário fechar a aba
     localStorage.setItem('apex_transaction_id', tid);
     setView('preview');
   };
 
   const handleUnlockReport = () => {
     if (transactionId) {
-      // Garante que está salvo antes de sair do site
-      localStorage.setItem('apex_transaction_id', transactionId);
-      
       const checkoutUrl = `${KIWIFY_BASE_URL}?aff_content=${transactionId}`;
-      console.log("Redirecionando para:", checkoutUrl);
       window.location.href = checkoutUrl;
     }
   };
 
-  // Função para "Sair" ou "Reiniciar" (Limpa a memória)
+  // FUNÇÃO DE RESET (A CHAVE PARA O SEU PROBLEMA)
   const handleReset = () => {
-    localStorage.removeItem('apex_transaction_id');
+    console.log("Resetando aplicação...");
+    localStorage.removeItem('apex_transaction_id'); // Limpa a memória
     setTransactionId(null);
-    setView('home');
-    window.history.replaceState({}, document.title, "/");
+    setView('home'); // Volta para a home
+    // Limpa a URL se tiver lixo
+    window.history.replaceState({}, document.title, window.location.pathname);
   };
 
   return (
@@ -80,8 +70,7 @@ function App() {
       {view === 'full_report' && transactionId && (
         <ReportFull 
           transactionId={transactionId} 
-          // @ts-ignore - Vamos adicionar essa prop no ReportFull no próximo passo
-          onRestart={handleReset} 
+          onRestart={handleReset} // Passando a função de reset
         />
       )}
     </div>
