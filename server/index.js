@@ -21,7 +21,7 @@ const ai = apiKey ? new GoogleGenAI({ apiKey }) : null;
 app.use(cors());
 app.use(express.json());
 
-// --- LOCALIZAR O FRONTEND ---
+// --- LOCALIZAR O FRONTEND (BLINDAGEM) ---
 const searchPaths = [
   path.join(__dirname, '../client/dist'),
   path.join(__dirname, '../../client/dist'),
@@ -50,13 +50,26 @@ const transactions = new Map();
 const calculateScores = (answers, questions) => {
   const scores = { Foco: 0, Adaptabilidade: 0, Inovacao: 0, Coragem: 0, InteligenciaSocial: 0 };
   const counts = { ...scores };
+  
+  // Para análise qualitativa no prompt
+  let qualitativeSummary = [];
+
   questions.forEach(q => {
     const val = answers[q.id] || 0;
     let key = q.module === 'Inovação' ? 'Inovacao' : (q.module === 'InteligênciaSocial' ? 'InteligenciaSocial' : q.module);
-    if (scores[key] !== undefined) { scores[key] += val; counts[key] += 1; }
+    
+    if (scores[key] !== undefined) { 
+      scores[key] += val; 
+      counts[key] += 1; 
+      // Guarda respostas extremas (1 ou 5) para a IA personalizar
+      if (val === 1 || val === 5) {
+        qualitativeSummary.push(`Item "${q.text}" -> Resposta: ${val}/5`);
+      }
+    }
   });
+
   Object.keys(scores).forEach(k => { if (counts[k] > 0) scores[k] = Math.round((scores[k] / (counts[k] * 5)) * 100); });
-  return scores;
+  return { scores, qualitativeSummary };
 };
 
 // --- ROTAS DA API ---
@@ -66,63 +79,68 @@ app.post('/api/quiz/submit', (req, res) => {
     const { answers, questions } = req.body;
     if(!answers) return res.status(400).json({message: 'Dados inválidos'});
     const transactionId = uuidv4();
-    const scores = calculateScores(answers, questions);
-    transactions.set(transactionId, { answers, questions, scores, status: 'PENDING', createdAt: new Date() });
+    const { scores, qualitativeSummary } = calculateScores(answers, questions);
+    
+    transactions.set(transactionId, { 
+      answers, 
+      questions, 
+      scores, 
+      qualitativeSummary,
+      status: 'PENDING', 
+      createdAt: new Date() 
+    });
     res.status(201).json({ transactionId });
   } catch (e) { console.error(e); res.status(500).json({message: 'Erro interno'}); }
 });
 
-// --- CORREÇÃO AQUI: Prompt Blindado para a Prévia ---
+// --- PRÉVIA PERSUASIVA (HOOK HIPER-PERSONALIZADO) ---
 app.post('/api/report/preview', async (req, res) => {
   try {
     const { transactionId } = req.body;
     const t = transactions.get(transactionId);
     if (!t) return res.status(404).json({ message: "Sessão não encontrada" });
     
-    if (!ai) return res.json({ previewText: "Seu perfil indica um potencial executivo alto, mas há uma trava emocional custando oportunidades." });
+    if (!ai) return res.json({ previewText: "Seu perfil revela um potencial executivo raro, mas detectamos um padrão de autossabotagem invisível ligado à sua adaptabilidade que pode estar custando oportunidades." });
 
-    // PROMPT MUITO MAIS RÍGIDO PARA EVITAR TEXTÃO
     const prompt = `
-      ATUE COMO: Copywriter especialista em persuasão e vendas.
-      DADOS DO USUÁRIO (0-100): ${JSON.stringify(t.scores)}
+      ATUE COMO: Especialista em Profiling Comportamental e Copywriting de Elite.
       
-      SUA MISSÃO: Escrever APENAS UM parágrafo curto (máximo 35 palavras) para a tela de pré-venda.
+      DADOS DO USUÁRIO:
+      - Scores (0-100): ${JSON.stringify(t.scores)}
+      - Comportamentos Extremos (As respostas mais fortes dele): 
+      ${t.qualitativeSummary.slice(0, 5).join('\n')}
       
-      REGRAS OBRIGATÓRIAS:
-      1. NÃO use Markdown, NÃO use negrito (**), NÃO use títulos (##). Apenas texto puro.
-      2. NÃO mostre as notas numéricas.
-      3. NÃO faça uma análise técnica.
-      4. O texto deve ter um tom de MISTÉRIO e ALERTA.
-      5. Estrutura: Elogie o ponto forte -> Diga que existe um "Ponto Cego" perigoso -> Convide para ver a solução.
+      MISSÃO: Escrever APENAS UM parágrafo de ALTO IMPACTO (máx 40 palavras) para vender o relatório completo.
       
-      Exemplo de resposta perfeita:
-      "Sua capacidade de Foco é impressionante e rara. Porém, detectamos um padrão de comportamento rígido que está limitando seu crescimento financeiro. O relatório completo revela exatamente qual hábito você precisa eliminar hoje."
+      REGRAS DE OURO:
+      1. Use os "Comportamentos Extremos" para provar que você leu a mente dele. Seja específico!
+      2. Crie uma TENSÃO imediata: Mostre que a maior força dele está gerando um efeito colateral perigoso (O Ponto Cego).
+      3. NÃO use markdown, asteriscos ou formatação. Apenas texto corrido.
+      4. Termine com um convite irrecusável.
+      
+      Exemplo do Tom: "Você disse que define prioridades claras, mas sua baixa pontuação em inovação sugere que você está apenas otimizando o passado, não criando o futuro. Descubra o que você está deixando na mesa agora."
     `;
 
     const response = await ai.models.generateContent({ 
       model: 'gemini-2.5-flash', 
       contents: prompt,
       config: { 
-        temperature: 0.6, // Temperatura menor para ser mais obediente
-        maxOutputTokens: 100 // Corta se tentar escrever muito
+        temperature: 0.8, 
+        maxOutputTokens: 150 
       } 
     });
     
-    // Limpeza extra caso a IA desobedeça e mande aspas ou quebras de linha
-    let cleanText = response.text.trim().replace(/[*#]/g, ''); // Remove * e #
+    let cleanText = response.text.trim().replace(/[*#]/g, '');
     if (cleanText.startsWith('"') && cleanText.endsWith('"')) {
       cleanText = cleanText.slice(1, -1);
     }
 
     res.json({ previewText: cleanText });
 
-  } catch (e) { 
-    console.error(e); 
-    // Fallback em caso de erro na IA
-    res.json({ previewText: "Identificamos um perfil de alta performance, mas um ponto cego específico está drenando sua energia e resultados. Desbloqueie para entender como corrigir isso." });
-  }
+  } catch (e) { console.error(e); res.status(500).json({message: 'Erro IA'}); }
 });
 
+// --- RELATÓRIO COMPLETO (A ENTREGA MASSIVA) ---
 app.get('/api/report/full/:transactionId', async (req, res) => {
   try {
     const { transactionId } = req.params;
@@ -133,13 +151,55 @@ app.get('/api/report/full/:transactionId', async (req, res) => {
 
     if (t.fullReport) return res.json(t.fullReport);
 
-    if (!ai) return res.json({ archetype: "Mock", summary: "Mock", dimensions: [], blindSpot: "Mock", actionPlan: [] });
+    // Mock para testes sem IA
+    if (!ai) return res.json({ 
+        archetype: "Estrategista Bloqueado", 
+        summary: "Texto mock...", 
+        dimensions: [], 
+        blindSpot: "Mock", 
+        actionPlan: [] 
+    });
 
-    const prompt = `Gere JSON detalhado para: ${JSON.stringify(t.scores)}. Schema: archetype, summary, dimensions(name, score, analysis), blindSpot, actionPlan.`;
-    const response = await ai.models.generateContent({ model: 'gemini-2.5-flash', contents: prompt, config: { responseMimeType: 'application/json' } });
+    const prompt = `
+      ATUE COMO: O Maior Consultor de Carreira e Psicologia Executiva do Mundo.
+      CONTEXTO: O usuário pagou por uma análise profunda e transformadora. Ele quer a "Verdade Nua e Crua".
+      
+      PERFIL DO USUÁRIO:
+      - Scores: ${JSON.stringify(t.scores)}
+      - Respostas Chave: ${JSON.stringify(t.qualitativeSummary)}
+
+      GERE UM JSON COM ESTA ESTRUTURA EXATA (Seja denso, rico e persuasivo):
+      {
+        "archetype": "Um Título de Arquétipo Poderoso e Único (Ex: O Visionário Solitário, O Executor Implacável)",
+        "summary": "Uma análise psicológica profunda de 3 parágrafos. O primeiro valida o ego dele (forças). O segundo destrói as ilusões (fraquezas ocultas). O terceiro mostra a visão de futuro se ele corrigir isso. Use linguagem 'Cold Reading' (ex: 'Você sente que muitas vezes carrega a equipe nas costas...').",
+        "dimensions": [
+          { 
+            "name": "Nome da Dimensão (ex: Foco)", 
+            "score": (número do score), 
+            "analysis": "Um parágrafo denso explicando não só a nota, mas COMO isso se manifesta no dia a dia dele e qual o impacto financeiro/emocional." 
+          }
+          // ... repetir para as 5 dimensões
+        ],
+        "blindSpot": "O Insight Matador. Uma verdade dura que ele provavelmente nega, mas que é a raiz dos problemas dele. Escreva de forma direta e impactante.",
+        "actionPlan": [
+          "Ação 1: Algo prático, técnico e imediato para fazer amanhã.",
+          "Ação 2: Uma mudança de mindset ou rotina baseada em neurociência/produtividade.",
+          "Ação 3: Um desafio comportamental para a próxima semana.",
+          "Ação 4: Uma ferramenta ou técnica específica para usar."
+        ]
+      }
+    `;
+
+    const response = await ai.models.generateContent({ 
+      model: 'gemini-2.5-flash', 
+      contents: prompt, 
+      config: { responseMimeType: 'application/json' } 
+    });
+    
     const data = JSON.parse(response.text);
     t.fullReport = data;
     res.json(data);
+
   } catch (e) { console.error(e); res.status(500).json({message: 'Erro IA'}); }
 });
 
