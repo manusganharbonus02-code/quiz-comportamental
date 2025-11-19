@@ -4,27 +4,33 @@ import Quiz from './pages/Quiz';
 import Report from './pages/Report';
 import { QuizData } from './types';
 import usePersistedState from './hooks/usePersistedState';
+// Importante: Importar o CSS global para o Tailwind funcionar
 import './index.css';
 
 type Page = 'home' | 'quiz' | 'report';
 
 function App() {
-  // MUDANÇA CRÍTICA: Agora persistimos a página atual. 
-  // Se o usuário for para a Kiwify e voltar, o site lembra que ele estava em 'report'.
-  const [page, setPage] = usePersistedState<Page>('app-current-page', 'home');
+  const [page, setPage] = useState<Page>('home');
+  
+  // Usa a memória do navegador para não perder os dados quando for para a Kiwify
   const [quizData, setQuizData] = usePersistedState<QuizData | null>('quizData', null);
   const [transactionId, setTransactionId] = usePersistedState<string | null>('transactionId', null);
 
+  // Efeito para detectar quando o usuário VOLTA do pagamento
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    // Kiwify pode retornar parâmetros variados, verificamos alguns comuns ou apenas a presença de params
-    const hasQueryParams = Array.from(params.keys()).length > 0;
+    // A Kiwify manda o ID de volta no parâmetro 'aff_content'
+    const urlTransactionId = params.get('aff_content');
 
-    // Se voltamos com dados salvos e estamos na home, força a ida para o report para verificar pagamento
-    if (hasQueryParams && quizData && page === 'home') {
+    if (urlTransactionId && quizData) {
+      console.log("Retorno do pagamento detectado. Indo para relatório.");
+      setTransactionId(urlTransactionId);
       setPage('report');
+      // Limpa a URL para ficar bonita
+      window.history.replaceState({}, document.title, window.location.pathname);
     }
-  }, [quizData, page, setPage]);
+  }, [quizData, setTransactionId]);
+
 
   const handleStartQuiz = () => {
     setQuizData(null);
@@ -32,18 +38,17 @@ function App() {
     setPage('quiz');
   };
 
-  const handleCompleteQuiz = (data: { checkoutUrl: string, quizData: QuizData }) => {
+  const handleCompleteQuiz = (data: { transactionId: string, quizData: QuizData }) => {
+    console.log("Quiz completo. Salvando dados e preparando redirecionamento.");
     setQuizData(data.quizData);
-    setPage('report'); // Garante que estamos na tela de relatório antes de sair
-    window.location.href = data.checkoutUrl;
+    setTransactionId(data.transactionId);
+    // O redirecionamento real acontece dentro do componente Quiz, aqui só salvamos o estado
   };
   
   const handleRestart = () => {
     setQuizData(null);
     setTransactionId(null);
     setPage('home');
-    // Limpa a URL
-    window.history.replaceState({}, document.title, window.location.pathname);
   };
 
   const renderPage = () => {
@@ -51,15 +56,16 @@ function App() {
       case 'quiz':
         return <Quiz onComplete={handleCompleteQuiz} onCancel={handleRestart} />;
       case 'report':
-        // Se temos dados, mostramos o relatório (que vai verificar o pagamento)
-        if (quizData) {
+        // Só mostra o relatório se tivermos o ID da transação e os dados
+        if (transactionId && quizData) {
           return <Report 
-            transactionId={transactionId || ''} 
-            quizData={quizData} 
+            transactionId={transactionId} 
+            answers={quizData.answers} 
+            questions={quizData.questions} 
             onRestart={handleRestart} 
           />;
         }
-        // Se algo deu errado e não temos dados, volta pra home
+        // Se algo der errado, volta para o início
         setPage('home');
         return <Home onStartQuiz={handleStartQuiz} />;
       case 'home':
@@ -69,7 +75,7 @@ function App() {
   };
 
   return (
-    <div className="bg-gray-900 text-gray-200 min-h-screen font-sans">
+    <div className="bg-slate-900 text-gray-200 min-h-screen font-sans">
       {renderPage()}
     </div>
   );
