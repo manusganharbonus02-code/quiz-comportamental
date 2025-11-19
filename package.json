@@ -2,12 +2,19 @@
   "name": "quiz-comportamental-monorepo",
   "private": true,
   "version": "1.0.0",
+  "engines": {
+    "node": ">=18"
+  },
   "scripts": {
+    "install-client": "cd client && npm install",
+    "install-server": "cd server && npm install",
+    "build-client": "cd client && npm run build",
+    "postinstall": "npm run install-client && npm run install-server",
+    "build": "npm run build-client",
+    "start": "cd server && node index.js",
     "dev": "concurrently \"npm:dev-client\" \"npm:dev-server\"",
     "dev-client": "npm --prefix client run dev",
-    "dev-server": "npm --prefix server start",
-    "build": "npm --prefix client run build",
-    "postinstall": "npm install --prefix client && npm install --prefix server"
+    "dev-server": "npm --prefix server run dev"
   },
   "devDependencies": {
     "concurrently": "^8.2.2"
