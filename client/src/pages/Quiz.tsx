@@ -1,9 +1,10 @@
-import { useState } from 'react';
+import React, { useState } from 'react';
 import { Button } from '../components/ui/Button';
 import { Card, CardContent } from '../components/ui/Card';
-import { ArrowLeft, ArrowRight, AlertCircle } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Loader2, AlertCircle } from 'lucide-react';
+import { submitQuizAnswers } from '../services/apiService';
 import { Answers, QuizCompletionData } from '../types';
-import { getQuizQuestions } from '../services/questionBank';
+import { getRandomQuestions } from '../services/questionBank';
 
 interface QuizPageProps {
   onComplete: (data: QuizCompletionData) => void;
@@ -18,19 +19,21 @@ const ANSWER_OPTIONS = [
     { value: 5, label: "Concordo Totalmente" },
 ];
 
+// Mapeamento para exibir nomes bonitos na tela
 const DIMENSION_NAMES: Record<string, string> = {
   Foco: "Foco",
   Adaptabilidade: "Adaptabilidade",
   AgressorRotina: "Inovação",
   MatadorDragoes: "Coragem",
   RadarSocial: "Inteligência Social",
-}
+};
 
 export default function QuizPage({ onComplete, onCancel }: QuizPageProps) {
-  const [quizQuestions] = useState(() => getQuizQuestions(25));
+  const [quizQuestions] = useState(() => getRandomQuestions(25));
   const [currentQuestion, setCurrentQuestion] = useState(0);
   const [answers, setAnswers] = useState<Answers>({});
   const [error, setError] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [isFading, setIsFading] = useState(false);
 
   const question = quizQuestions[currentQuestion];
@@ -67,36 +70,48 @@ export default function QuizPage({ onComplete, onCancel }: QuizPageProps) {
     }
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (Object.keys(answers).length !== quizQuestions.length) {
-      setError("Parece que faltam respostas.");
+      setError("Parece que faltam respostas. Por favor, revise antes de finalizar.");
       return;
     }
-    // NÃO chama API aqui. Apenas passa os dados para mostrar a prévia.
-    onComplete({ transactionId: "", answers, questions: quizQuestions });
+
+    setIsSubmitting(true);
+    try {
+      // CORREÇÃO: Envia respostas E perguntas para o backend
+      const { transactionId } = await submitQuizAnswers(answers, quizQuestions);
+      onComplete({ transactionId, answers, questions: quizQuestions });
+    } catch (err) {
+      setError("Ocorreu um erro ao enviar suas respostas. Tente novamente.");
+      console.error(err);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
-    <div className="min-h-screen p-4 flex items-center justify-center animate-fade-in">
+    <div className="min-h-screen bg-slate-900 p-4 flex items-center justify-center">
       <div className="w-full max-w-2xl mx-auto">
         <div className="mb-6 text-center">
           <p className="text-gray-400 font-semibold">Pergunta {currentQuestion + 1} de {quizQuestions.length}</p>
           <div className="mt-2 bg-slate-700 rounded-full h-2.5">
             <div
-              className="bg-teal-500 h-2.5 rounded-full transition-all duration-300"
+              className="bg-gradient-to-r from-amber-500 to-orange-500 h-2.5 rounded-full transition-all duration-300"
               style={{ width: `${progress}%` }}
             />
           </div>
         </div>
+
         <div className={`transition-opacity duration-300 ${isFading ? 'opacity-0' : 'opacity-100'}`}>
             <Card>
             <CardContent className="p-6 sm:p-10">
                 <div className="mb-8 min-h-[120px] flex flex-col justify-center">
-                <span className="inline-block bg-teal-900 text-teal-300 px-3 py-1 rounded-full text-sm font-semibold mb-4 self-center">
+                <span className="inline-block bg-teal-900/50 text-teal-300 px-3 py-1 rounded-full text-sm font-semibold mb-4 self-center">
                     {DIMENSION_NAMES[question.module]}
                 </span>
                 <h2 className="text-xl sm:text-2xl font-bold text-gray-100 text-center">{question.text}</h2>
                 </div>
+
                 <div className="space-y-3">
                 {ANSWER_OPTIONS.map(option => (
                     <button
@@ -104,14 +119,15 @@ export default function QuizPage({ onComplete, onCancel }: QuizPageProps) {
                     onClick={() => handleAnswer(option.value)}
                     className={`w-full p-4 text-left rounded-lg border-2 transition-all duration-200 text-gray-200 font-medium ${
                         answers[question.id] === option.value
-                        ? "border-teal-500 bg-teal-900/40"
-                        : "border-slate-600 hover:border-teal-500/50 bg-slate-700/50"
+                        ? "border-amber-500 bg-amber-900/20 ring-2 ring-amber-500/30"
+                        : "border-slate-600 hover:border-amber-500/50 bg-slate-700/50"
                     }`}
                     >
                     {option.label}
                     </button>
                 ))}
                 </div>
+                
                 {error && (
                 <div className="mt-6 p-3 bg-red-900/50 border border-red-500/30 rounded-lg flex items-center gap-3">
                     <AlertCircle className="w-5 h-5 text-red-400 flex-shrink-0" />
@@ -121,13 +137,47 @@ export default function QuizPage({ onComplete, onCancel }: QuizPageProps) {
             </CardContent>
             </Card>
         </div>
+
         <div className="grid grid-cols-3 gap-4 items-center mt-8">
-            <Button onClick={handlePrevious} disabled={currentQuestion === 0} variant="outline"><ArrowLeft className="w-4 h-4 mr-2" /> Anterior</Button>
-            <Button onClick={onCancel} variant="ghost" className="text-gray-400 hover:text-red-400">Cancelar</Button>
+            <Button
+                onClick={handlePrevious}
+                disabled={currentQuestion === 0}
+                variant="outline"
+                className="flex items-center justify-center gap-2"
+            >
+                <ArrowLeft className="w-4 h-4" />
+                Anterior
+            </Button>
+
+            <Button
+                onClick={onCancel}
+                variant="ghost"
+                className="text-slate-400 hover:text-red-400"
+            >
+                Cancelar
+            </Button>
+
             {isLastQuestion ? (
-                <Button onClick={handleSubmit} disabled={!isAnswered} className="bg-green-600 hover:bg-green-500 text-white">Ver Resultado</Button>
+                <Button
+                    onClick={handleSubmit}
+                    disabled={isSubmitting || !isAnswered}
+                    className="bg-green-600 hover:bg-green-500 text-white shadow-lg shadow-green-500/20"
+                >
+                    {isSubmitting ? (
+                        <Loader2 className="w-5 h-5 animate-spin" />
+                    ) : (
+                        "Finalizar e Ver Prévia"
+                    )}
+                </Button>
             ) : (
-                <Button onClick={handleNext} disabled={!isAnswered}>Próxima <ArrowRight className="w-4 h-4 ml-2" /></Button>
+                <Button
+                    onClick={handleNext}
+                    disabled={!isAnswered}
+                    className="flex items-center justify-center gap-2"
+                >
+                    Próxima
+                    <ArrowRight className="w-4 h-4" />
+                </Button>
             )}
         </div>
       </div>
