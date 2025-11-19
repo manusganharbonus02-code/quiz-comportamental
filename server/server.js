@@ -5,157 +5,217 @@ import { GoogleGenAI, Type } from '@google/genai';
 import { v4 as uuidv4 } from 'uuid';
 import { calculateScores } from './quizLogic.js';
 
+// --- VERIFICAÇÃO DE VARIÁVEIS DE AMBIENTE ---
 if (!process.env.API_KEY) {
-  console.error("ERRO FATAL: API_KEY não definida.");
-  process.exit(1);
+  console.error("ERRO FATAL: A variável de ambiente API_KEY da Gemini não está definida.");
+  // Não encerramos o processo para permitir que o servidor inicie e mostre logs, mas a IA falhará.
 }
 
-const KIWIFY_PRODUCT_URL = "https://pay.kiwify.com.br/RHpnrVL";
+// --- CONFIGURAÇÃO INICIAL ---
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const app = express();
 const PORT = process.env.PORT || 4000;
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
+// --- CONFIGURAÇÃO DA IA ---
+// Inicializa apenas se a chave existir para evitar crash imediato
+const ai = process.env.API_KEY ? new GoogleGenAI({ apiKey: process.env.API_KEY }) : null;
+
+// Middleware
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+// --- BANCO DE DADOS EM MEMÓRIA ---
 const transactions = new Map();
 
-async function generateReport(scores) {
-  // PROMPT DE ALTA PERFORMANCE: CRIADO PARA GERAR VALOR E PERSUASÃO
-  const prompt = `
-  ATUE COMO: Um Especialista Sênior em Análise Comportamental e Coach de Carreira de Executivos.
+// Mapeamento de labels para a IA entender as respostas
+const ANSWER_LABELS = { 1: "Discordo Totalmente", 2: "Discordo", 3: "Neutro", 4: "Concordo", 5: "Concordo Totalmente" };
+const formatAnswersForAI = (questions, answers) => {
+    return questions
+        .map(q => `Dimensão '${q.dimension}': "${q.text}" -> Resposta: ${ANSWER_LABELS[answers[q.id]] || 'N/A'} (valor: ${answers[q.id]}/5)`)
+        .join('\n');
+};
+
+// --- ROTAS DA API ---
+
+// 1. SUBMETER QUIZ (Início da Jornada)
+app.post('/api/quiz/submit', (req, res) => {
+  try {
+    const { answers, questions } = req.body;
+    if (!answers || !questions) {
+      return res.status(400).json({ message: 'Dados inválidos.' });
+    }
+    const transactionId = uuidv4();
+    transactions.set(transactionId, { answers, questions, status: 'PENDING' });
+    console.log(`[NOVO QUIZ] Transação criada: ${transactionId}`);
+    res.status(201).json({ transactionId });
+  } catch (error) {
+    console.error("Erro ao submeter quiz:", error);
+    res.status(500).json({ message: "Erro interno ao processar o quiz." });
+  }
+});
+
+// 2. GERAR PRÉVIA PERSUASIVA (O Gancho)
+app.post('/api/report/preview', async (req, res) => {
+  if (!ai) return res.status(500).json({ message: "Servidor de IA não configurado (API_KEY ausente)." });
+
+  const { answers, questions } = req.body;
   
-  CONTEXTO: O usuário acabou de realizar um investimento financeiro para receber esta análise. O relatório DEVE ser surpreendente, profundo, técnico e extremamente útil. Não use clichês.
+  const scores = calculateScores(answers, questions);
+  if (!scores) return res.status(400).json({ message: 'Erro ao calcular scores.' });
 
-  DADOS DO PERFIL (0-100):
-  - Foco: ${scores.Foco}
-  - Adaptabilidade: ${scores.Adaptabilidade}
-  - Inovação: ${scores.AgressorRotina}
-  - Coragem: ${scores.MatadorDragoes}
-  - Inteligência Social: ${scores.RadarSocial}
+  // Identifica a dimensão mais forte e a mais fraca para personalizar o gancho
+  const sortedScores = Object.entries(scores).sort(([,a], [,b]) => b - a);
+  const strongest = sortedScores[0][0]; // Ex: Foco
+  const weakest = sortedScores[sortedScores.length - 1][0]; // Ex: Resiliência
 
-  ESTRUTURA OBRIGATÓRIA DO JSON:
+  const systemInstruction = `Você é um especialista renomado em comportamento humano e persuasão de alto nível. 
+  Sua missão é escrever um parágrafo curto e extremamente intrigante para um usuário que acabou de fazer um teste comportamental.
   
-  1. **archetypeTitle**: Crie um título de Arquétipo impactante e único (ex: "O Estrategista Imparável", "O Arquiteto de Mudanças").
-  2. **archetypeDescription**: Um resumo executivo poderoso. Comece validando a identidade dele ("Você é alguém que..."). Destaque o valor único dele no mercado.
-  3. **dimensionAnalyses** (Para cada uma das 5 dimensões):
-     - **interpretation**: Uma análise técnica. Se a nota for baixa, explique o risco (Ponto Negativo/Cego). Se for alta, explique a vantagem (Ponto Positivo). Seja direto e realista.
-     - **strengths**: Liste 2 "Superpoderes" dessa dimensão. O que ele faz melhor que a média?
-     - **recommendations**: Liste 2 ações táticas imediatas. Uma para mitigar o ponto fraco e outra para alavancar o ponto forte.
+  OBJETIVO: Fazer o usuário sentir uma necessidade urgente de comprar o relatório completo.
+  
+  ESTRATÉGIA:
+  1. Valide o usuário: Comece elogiando a dimensão mais forte dele (${strongest}). Diga que ele tem um "talento natural raro".
+  2. Crie a tensão (O Gap): Mencione que você detectou um "padrão de comportamento oculto" ligado à dimensão mais fraca (${weakest}) que está sabotando silenciosamente o crescimento dele.
+  3. Não revele a solução: Diga que o relatório completo explica exatamente como desbloquear essa trava.
+  4. Use gatilhos mentais: Curiosidade, Exclusividade e Medo de Perder (FOMO).
+  
+  Tom de voz: Profissional, misterioso, direto e autoridade.`;
 
-  TOM DE VOZ: Profissional, Perspicaz, Encorajador, mas "Duro na queda" quando necessário (aponte as falhas como oportunidades de lucro/crescimento).
-  `;
+  const prompt = `Gere a prévia persuasiva. O usuário pontuou alto em ${strongest} e baixo em ${weakest}.`;
 
-  const schema = {
+  try {
+    const response = await ai.models.generateContent({ 
+      model: "gemini-2.5-flash", 
+      contents: prompt, 
+      config: { systemInstruction, temperature: 0.8 } 
+    });
+    res.status(200).json({ previewText: response.text.trim() });
+  } catch (error) {
+    console.error("Erro na prévia:", error);
+    res.status(500).json({ message: "Erro ao gerar prévia." });
+  }
+});
+
+// 3. GERAR RELATÓRIO COMPLETO (A Entrega de Valor)
+app.get('/api/report/full/:transactionId', async (req, res) => {
+  const { transactionId } = req.params;
+  const transaction = transactions.get(transactionId);
+
+  if (!transaction) return res.status(404).json({ message: 'Transação não encontrada.' });
+  
+  // Permite gerar se estiver PAGO ou em ambiente de desenvolvimento (opcional, mas seguro manter a verificação)
+  if (transaction.status !== 'PAID') {
+      console.warn(`Tentativa de acesso a relatório não pago: ${transactionId}`);
+      return res.status(402).json({ message: 'Pagamento pendente.' });
+  }
+
+  // Se já existe cache, retorna
+  if (transaction.reportData) {
+      return res.status(200).json(transaction.reportData);
+  }
+
+  if (!ai) return res.status(500).json({ message: "Servidor de IA não configurado." });
+
+  const { answers, questions } = transaction;
+  const scores = calculateScores(answers, questions);
+  const formattedAnswers = formatAnswersForAI(questions, answers);
+
+  const systemInstruction = `Você é um consultor executivo de carreira sênior. O usuário pagou por uma análise comportamental profunda.
+  Sua tarefa é gerar um relatório JSON detalhado, acionável e transformador.
+  
+  Baseie-se nas pontuações: ${JSON.stringify(scores)}.
+  
+  Estrutura da Análise:
+  1. "interpretations": Para cada pilar (Foco, Produtividade, Resiliência), escreva uma análise profunda (3-4 frases). Não seja genérico. Use os dados das respostas para ser específico.
+  2. "recommendations": Liste 5 ações práticas, "mão na massa", que o usuário pode fazer amanhã para melhorar seus resultados.`;
+
+  const prompt = `Analise estas respostas detalhadas:\n${formattedAnswers}\n\nGere o JSON de acordo com o schema.`;
+  
+  const responseSchema = {
     type: Type.OBJECT,
     properties: {
-      archetypeTitle: { type: Type.STRING },
-      archetypeDescription: { type: Type.STRING },
-      dimensionAnalyses: {
-        type: Type.ARRAY,
-        items: {
-          type: Type.OBJECT,
-          properties: {
-            dimensionName: { type: Type.STRING },
-            score: { type: Type.NUMBER },
-            interpretation: { type: Type.STRING },
-            strengths: { type: Type.ARRAY, items: { type: Type.STRING } },
-            recommendations: { type: Type.ARRAY, items: { type: Type.STRING } }
-          },
-          required: ["dimensionName", "score", "interpretation", "strengths", "recommendations"]
-        }
-      }
+      archetypeTitle: { type: Type.STRING }, // Adicionado para compatibilidade com frontend
+      archetypeDescription: { type: Type.STRING }, // Adicionado para compatibilidade com frontend
+      scores: { type: Type.OBJECT, properties: { Foco: { type: Type.NUMBER }, Produtividade: { type: Type.NUMBER }, Resiliência: { type: Type.NUMBER } } },
+      interpretations: { type: Type.OBJECT, properties: { Foco: { type: Type.STRING }, Produtividade: { type: Type.STRING }, Resiliência: { type: Type.STRING } } },
+      recommendations: { type: Type.ARRAY, items: { type: Type.STRING } }
     },
-    required: ["archetypeTitle", "archetypeDescription", "dimensionAnalyses"]
+    required: ["scores", "interpretations", "recommendations", "archetypeTitle", "archetypeDescription"]
   };
 
   try {
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
-      contents: prompt,
-      config: { responseMimeType: "application/json", responseSchema: schema, temperature: 0.7 }
+    const response = await ai.models.generateContent({ 
+      model: "gemini-2.5-flash", 
+      contents: prompt, 
+      config: { systemInstruction, responseMimeType: "application/json", responseSchema, temperature: 0.7 } 
     });
-    return JSON.parse(response.text);
-  } catch (error) {
-    console.error("Erro IA:", error);
-    throw new Error("Falha na geração do relatório.");
-  }
-}
+    
+    const aiData = JSON.parse(response.text.trim());
+    
+    // Garante que os scores numéricos calculados sejam usados (mais preciso que a IA)
+    aiData.scores = scores; 
+    
+    // Fallback para campos que podem vir vazios
+    if (!aiData.archetypeTitle) aiData.archetypeTitle = "Perfil em Análise";
+    if (!aiData.archetypeDescription) aiData.archetypeDescription = "Sua análise completa está detalhada abaixo.";
 
-app.post('/api/start-checkout', (req, res) => {
-  try {
-    const { answers, questions } = req.body;
-    if (!answers || !questions) return res.status(400).json({ message: 'Dados ausentes.' });
-    
-    const transactionId = uuidv4();
-    transactions.set(transactionId, { status: 'PENDING', report: null, answers, questions });
-    
-    const checkoutUrl = `${KIWIFY_PRODUCT_URL}?aff_content=${transactionId}`;
-    res.status(201).json({ transactionId, checkoutUrl });
+    // ADAPTAÇÃO: O frontend espera 'dimensionAnalyses'. Vamos converter o formato antigo para o novo se necessário.
+    // Mas para manter compatibilidade com o seu frontend atual (que parece esperar scores/interpretations separados),
+    // vamos manter a estrutura que o frontend Report.tsx usa.
+    // Observando o Report.tsx que você mandou, ele usa: reportData.scores.Foco, reportData.interpretations.Foco.
+    // Então este JSON está correto.
+
+    transaction.reportData = aiData; // Cache
+    res.status(200).json(aiData);
   } catch (error) {
-    res.status(500).json({ message: 'Erro ao iniciar checkout.' });
+    console.error("Erro no relatório completo:", error);
+    res.status(500).json({ message: "Erro ao gerar relatório completo." });
   }
 });
 
+// 4. WEBHOOK KIWIFY (Confirmação de Pagamento)
 app.post('/api/kiwify-webhook', (req, res) => {
   const data = req.body;
-  const transactionId = data?.aff_content;
-  if (transactionId && (data?.order_status === 'paid' || data?.status === 'paid')) {
-    // Procura a transação ou cria um placeholder se o servidor tiver reiniciado
-    if (transactions.has(transactionId)) {
-        transactions.get(transactionId).status = 'PAID';
-    } else {
-        // Armazena que foi pago, para quando o cliente voltar com os dados
-        transactions.set(transactionId, { status: 'PAID', report: null, answers: null, questions: null });
-    }
-  }
-  res.sendStatus(200);
-});
+  console.log('[WEBHOOK RAW]', JSON.stringify(data));
 
-app.post('/api/get-report', async (req, res) => {
-  let { transactionId, answers, questions } = req.body;
-  
-  let transaction = transactions.get(transactionId);
-  
-  // Lógica de Recuperação Robusta
-  if (!transaction) {
-    if (answers && questions) {
-       // Cliente trouxe os dados. Criamos a transação e assumimos pago (confiança no fluxo UX)
-       console.log(`[Recuperação] Restaurando sessão ${transactionId}.`);
-       transaction = { status: 'PAID', report: null, answers, questions };
-       transactions.set(transactionId, transaction);
-    } else {
-       return res.status(404).json({ message: 'Sessão expirada.' });
+  // Tenta capturar o ID de várias formas possíveis que a Kiwify pode enviar
+  const transactionId = data.aff_content || data.src || (data.order && data.order.src); 
+  const orderStatus = data.order_status;
+
+  console.log(`[WEBHOOK] ID Extraído: ${transactionId}, Status: ${orderStatus}`);
+
+  if (transactionId && transactions.has(transactionId)) {
+    if (orderStatus === 'paid') {
+        transactions.get(transactionId).status = 'PAID';
+        console.log(`[PAGAMENTO CONFIRMADO] Transação ${transactionId} liberada.`);
     }
   } else {
-      // Se a transação existe mas estava sem dados (veio do webhook antes), preenchemos agora
-      if (!transaction.answers && answers) transaction.answers = answers;
-      if (!transaction.questions && questions) transaction.questions = questions;
+      console.warn(`[WEBHOOK] Transação ${transactionId} não encontrada na memória.`);
   }
-
-  // UX: Se o cliente está aqui pedindo o relatório, assumimos que o pagamento ocorreu 
-  // (ou que ele clicou em voltar). A verificação real seria via banco de dados em prod.
-  // Aqui priorizamos a entrega do valor.
-  if (transaction.status !== 'PAID') transaction.status = 'PAID';
-
-  if (transaction.report) return res.status(200).json(transaction.report);
-
-  try {
-    const scores = calculateScores(transaction.answers, transaction.questions);
-    if (!scores) return res.status(400).json({ message: 'Erro cálculo.' });
-    
-    const report = await generateReport(scores);
-    transaction.report = report;
-    res.status(200).json(report);
-  } catch (error) {
-    res.status(500).json({ message: 'Erro IA.' });
-  }
+  res.status(200).send('OK');
 });
 
+// Status Check
+app.get('/api/payment/status/:transactionId', (req, res) => {
+  const t = transactions.get(req.params.transactionId);
+  res.json({ status: t ? t.status : 'UNKNOWN' });
+});
+
+// Simulação
+app.post('/api/payment/simulate/:transactionId', (req, res) => {
+  const t = transactions.get(req.params.transactionId);
+  if(t) { 
+      t.status = 'PAID'; 
+      console.log(`[SIMULAÇÃO] Transação ${req.params.transactionId} marcada como PAGA.`);
+      res.json({msg: 'Pago'}); 
+  }
+  else res.status(404).json({msg: 'Não encontrado'});
+});
+
+// Servir Frontend
 const clientBuildPath = path.resolve(__dirname, '..', 'client', 'dist');
 app.use(express.static(clientBuildPath));
 app.get('*', (req, res) => res.sendFile(path.resolve(clientBuildPath, 'index.html')));
 
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+app.listen(PORT, () => console.log(`Servidor rodando na porta ${PORT}`));
