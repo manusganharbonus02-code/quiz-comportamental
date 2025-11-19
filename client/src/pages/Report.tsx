@@ -1,145 +1,265 @@
-import { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { Button } from "../components/ui/Button";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/Card";
-import { Home, Loader2, AlertCircle, Lock, Star } from "lucide-react";
-import { fetchReportData, startCheckout } from '../services/apiService';
-import { ReportData, QuizData } from "../types";
-import { ReportScreen } from "../components/ReportScreen";
+import { Download, Home, Loader2, CheckCircle, CreditCard, AlertCircle, Star, Lock, ArrowRight, Award } from "lucide-react";
+import { Radar } from "react-chartjs-2";
+import { Chart as ChartJS, RadialLinearScale, PointElement, LineElement, Filler, Tooltip, Legend } from "chart.js";
+import { checkPaymentStatus, fetchReportData, simulateSuccessfulPayment, fetchReportPreview } from '../services/apiService';
+import { ReportData, Answers, QuizQuestion } from "../types";
+
+ChartJS.register(RadialLinearScale, PointElement, LineElement, Filler, Tooltip, Legend);
+
+// SEU LINK DE CHECKOUT
+const KIWIFY_CHECKOUT_URL = 'https://pay.kiwify.com.br/RHpnrVL';
 
 interface ReportPageProps {
   transactionId: string;
-  quizData: QuizData;
+  answers: Answers;
+  questions: QuizQuestion[];
   onRestart: () => void;
 }
 
-export default function ReportPage({ transactionId, quizData, onRestart }: ReportPageProps) {
-  // Se tem ID, é porque voltou do pagamento (loading). Se não, é prévia (preview).
-  const [viewState, setViewState] = useState<'preview' | 'loading' | 'success' | 'error'>(
-    transactionId ? 'loading' : 'preview'
-  );
+export default function ReportPage({ transactionId, answers, questions, onRestart }: ReportPageProps) {
+  const [paymentStage, setPaymentStage] = useState<'preview' | 'waiting' | 'success' | 'error'>('preview');
   const [reportData, setReportData] = useState<ReportData | null>(null);
-  const [errorMessage, setErrorMessage] = useState("");
+  const [previewText, setPreviewText] = useState("");
+  const [isLoadingPreview, setIsLoadingPreview] = useState(true);
+  const [countdown, setCountdown] = useState(3);
 
-  // Busca o relatório REAL apenas se voltou do pagamento
-  useEffect(() => {
-    if (transactionId && viewState === 'loading') {
-      fetchReportData(transactionId, quizData)
-        .then(data => {
-          setReportData(data);
-          setViewState('success');
-        })
-        .catch(err => {
-          console.error(err);
-          setErrorMessage("Erro ao gerar sua análise. Tente recarregar.");
-          setViewState('error');
-        });
-    }
-  }, [transactionId, viewState, quizData]);
-
-  const handleBuyClick = async () => {
-    setViewState('loading'); // Mostra loading enquanto prepara o checkout
-    try {
-      const { checkoutUrl } = await startCheckout(quizData);
-      window.location.href = checkoutUrl;
-    } catch (err) {
-      setViewState('preview');
-      alert("Erro ao conectar com o pagamento. Tente novamente.");
-    }
+  // Inicia o fluxo de pagamento
+  const handleUnlockReport = () => {
+    // Adiciona o ID da transação na URL da Kiwify para o webhook funcionar
+    const checkoutUrl = `${KIWIFY_CHECKOUT_URL}?aff_content=${transactionId}`;
+    window.open(checkoutUrl, '_blank');
+    
+    // Em produção, comente a linha abaixo se quiser testar apenas com pagamento real
+    // simulateSuccessfulPayment(transactionId); 
+    
+    setPaymentStage('waiting');
   };
 
-  // TELA DE PRÉVIA (VENDAS)
-  if (viewState === 'preview') {
-    return (
-       <div className="min-h-screen bg-slate-900 flex items-center justify-center p-4 animate-fade-in">
-          <div className="max-w-3xl w-full space-y-6">
-            <div className="text-center space-y-2">
-                <h1 className="text-3xl md:text-4xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-amber-400 to-orange-500">
-                    Análise Concluída com Sucesso!
-                </h1>
-                <p className="text-gray-400 text-lg">Mapeamos o seu DNA comportamental.</p>
-            </div>
+  // Busca a prévia assim que a tela carrega
+  useEffect(() => {
+    if (paymentStage === 'preview' && !previewText) {
+        fetchReportPreview(answers, questions)
+            .then(text => setPreviewText(text))
+            .catch(err => {
+                console.error("Erro na prévia:", err);
+                setPreviewText("Seu perfil revela um potencial extraordinário, mas identificamos um padrão crítico que pode estar limitando seu crescimento financeiro e profissional.");
+            })
+            .finally(() => setIsLoadingPreview(false));
+    }
+  }, [paymentStage, answers, questions, previewText]);
 
-            <Card className="bg-slate-800/80 border-amber-500/30 border-2 shadow-2xl shadow-amber-900/20">
-                <CardHeader>
-                    <CardTitle className="text-2xl text-gray-100 flex items-center gap-2">
-                        <Star className="w-6 h-6 text-amber-400 fill-amber-400" />
-                        O que descobrimos sobre você:
+  // Polling para verificar pagamento
+  const verifyPayment = useCallback(async () => {
+    try {
+      const response = await checkPaymentStatus(transactionId);
+      if (response.status === 'PAID') {
+        setPaymentStage('success');
+      }
+    } catch (err) {
+      console.error("Erro checando pagamento:", err);
+    }
+  }, [transactionId]);
+
+  useEffect(() => {
+    let interval: ReturnType<typeof setInterval>;
+    if (paymentStage === 'waiting') {
+      verifyPayment(); // Checa imediatamente
+      interval = setInterval(verifyPayment, 3000); // Checa a cada 3s
+    }
+    return () => clearInterval(interval);
+  }, [paymentStage, verifyPayment]);
+
+  // Efeito visual do countdown na tela de espera
+  useEffect(() => {
+      let int: ReturnType<typeof setInterval>;
+      if(paymentStage === 'waiting') {
+          setCountdown(3);
+          int = setInterval(() => setCountdown(p => p > 1 ? p - 1 : 3), 1000);
+      }
+      return () => clearInterval(int);
+  }, [paymentStage]);
+
+  // Busca o relatório final após sucesso
+  useEffect(() => {
+    if (paymentStage === 'success' && !reportData) {
+        fetchReportData(transactionId)
+            .then(data => setReportData(data))
+            .catch(() => setPaymentStage('error'));
+    }
+  }, [paymentStage, reportData, transactionId]);
+
+  // Configuração do Gráfico
+  const radarData = {
+    labels: ["Foco", "Produtividade", "Resiliência"],
+    datasets: [{
+      label: "Seu Perfil",
+      data: [reportData?.scores.Foco || 0, reportData?.scores.Produtividade || 0, reportData?.scores.Resiliência || 0],
+      borderColor: "#f59e0b",
+      backgroundColor: "rgba(245, 158, 11, 0.2)",
+      borderWidth: 2,
+      pointBackgroundColor: "#f59e0b",
+    }],
+  };
+
+  // --- RENDERIZADORES ---
+
+  // 1. TELA DE PRÉVIA (O GANCHO)
+  const renderPreview = () => (
+    <div className="max-w-3xl mx-auto space-y-8">
+        <div className="text-center space-y-4">
+            <h1 className="text-4xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-amber-400 to-orange-500">
+                Análise Preliminar Concluída
+            </h1>
+            <p className="text-gray-400 text-lg">
+                Nossa Inteligência Artificial processou suas respostas e encontrou algo importante.
+            </p>
+        </div>
+
+        {isLoadingPreview ? (
+            <div className="flex justify-center py-12"><Loader2 className="w-12 h-12 text-amber-500 animate-spin"/></div>
+        ) : (
+            <Card className="border-amber-500/30 bg-slate-800/80 shadow-2xl shadow-amber-900/20 overflow-hidden relative">
+                <CardHeader className="bg-amber-500/10 border-b border-amber-500/20">
+                    <CardTitle className="flex items-center gap-2 text-amber-400">
+                        <Star className="w-5 h-5 fill-amber-400" /> Insight Exclusivo Detectado
                     </CardTitle>
                 </CardHeader>
-                <CardContent className="space-y-6">
-                    <div className="bg-slate-900/50 p-6 rounded-xl border border-slate-700">
-                        <p className="text-gray-300 text-lg leading-relaxed">
-                            Suas respostas revelaram um perfil <span className="font-bold text-amber-400">altamente estratégico</span>. Você possui uma combinação rara de traços que indicam grande potencial de liderança, mas detectamos <span className="font-bold text-red-400">2 bloqueios críticos</span> que podem estar limitando seus ganhos financeiros e sua satisfação profissional hoje.
-                        </p>
+                <CardContent className="pt-6 space-y-6">
+                    <div className="text-xl text-gray-200 leading-relaxed font-medium border-l-4 border-amber-500 pl-4 italic">
+                        "{previewText}"
                     </div>
                     
-                    <div className="grid md:grid-cols-2 gap-4">
-                        <div className="p-4 bg-slate-900/50 rounded-lg opacity-75">
-                            <h4 className="font-bold text-gray-500 mb-2 flex items-center gap-2">
-                                <Lock className="w-4 h-4" /> Análise de Foco & Produtividade
-                            </h4>
-                            <div className="h-2 bg-slate-700 rounded-full overflow-hidden">
-                                <div className="h-full bg-gray-500 w-3/4 blur-sm"></div>
-                            </div>
+                    {/* O EFEITO BLUR "MANIPULADOR" */}
+                    <div className="relative mt-8 rounded-xl border border-slate-700 bg-slate-900/50 p-6">
+                        <div className="absolute inset-0 backdrop-blur-md bg-slate-900/60 z-10 flex flex-col items-center justify-center rounded-xl">
+                            <Lock className="w-12 h-12 text-gray-400 mb-3" />
+                            <p className="text-gray-200 font-bold text-lg">Análise Profunda Bloqueada</p>
+                            <p className="text-gray-400 text-sm">Desbloqueie para ver o plano de correção.</p>
                         </div>
-                        <div className="p-4 bg-slate-900/50 rounded-lg opacity-75">
-                             <h4 className="font-bold text-gray-500 mb-2 flex items-center gap-2">
-                                <Lock className="w-4 h-4" /> Inteligência Emocional
-                            </h4>
-                            <div className="h-2 bg-slate-700 rounded-full overflow-hidden">
-                                <div className="h-full bg-gray-500 w-1/2 blur-sm"></div>
-                            </div>
+                        <div className="space-y-4 opacity-30 select-none filter blur-sm">
+                            <h3 className="text-lg font-bold text-red-400">⚠️ Onde você está perdendo dinheiro:</h3>
+                            <p>Baseado na resposta 12, seu padrão de comportamento indica uma falha crítica em...</p>
+                            <h3 className="text-lg font-bold text-green-400">🚀 Seu multiplicador de sucesso:</h3>
+                            <p>Seu nível de Foco permite que você...</p>
                         </div>
                     </div>
 
-                    <div className="pt-4">
-                        <Button onClick={handleBuyClick} size="lg" className="w-full text-xl py-8 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-500 hover:to-emerald-500 border-none shadow-xl shadow-green-900/20 transform transition-all hover:scale-[1.02]">
-                            QUERO DESBLOQUEAR MEU RELATÓRIO COMPLETO
-                        </Button>
-                        <p className="text-center text-gray-500 text-sm mt-3">
-                            Acesso imediato • Pagamento único de R$ 5,00 • Compra Segura
-                        </p>
-                    </div>
+                    <Button onClick={handleUnlockReport} size="lg" className="w-full text-lg h-16 animate-pulse bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-400 hover:to-orange-500 border-0">
+                        DESBLOQUEAR MEU RELATÓRIO AGORA <ArrowRight className="ml-2 w-6 h-6" />
+                    </Button>
+                    <p className="text-center text-xs text-gray-500 uppercase tracking-wider">Acesso Vitalício • Garantia de 7 dias • Pagamento Seguro</p>
                 </CardContent>
             </Card>
-            <div className="text-center">
-                <Button onClick={onRestart} variant="ghost" className="text-slate-500 hover:text-slate-400">Voltar ao início (Perder dados)</Button>
-            </div>
-          </div>
-       </div>
-    );
-  }
+        )}
+    </div>
+  );
 
-  if (viewState === 'loading') {
-    return (
-      <div className="min-h-screen flex flex-col items-center justify-center text-center p-4 bg-slate-900">
-        <Loader2 className="w-16 h-16 text-amber-500 animate-spin mb-6" />
-        <h2 className="text-2xl font-bold text-gray-100 mb-2">Gerando sua Análise Premium...</h2>
-        <p className="text-gray-400 max-w-md">
-          Nossa Inteligência Artificial está compilando seus dados, cruzando com padrões de mercado e escrevendo seu plano de desenvolvimento.
-        </p>
-      </div>
-    );
-  }
-
-  if (viewState === 'error') {
-    return (
-       <div className="min-h-screen flex items-center justify-center bg-slate-900 p-4">
-        <Card className="max-w-md mx-auto text-center border-red-500/50 bg-slate-800">
-            <CardContent className="pt-8">
-                <AlertCircle className="w-16 h-16 text-red-500 mx-auto mb-6" />
-                <h2 className="text-2xl font-bold text-gray-100 mb-2">Algo deu errado</h2>
-                <p className="text-gray-400">{errorMessage}</p>
-                 <Button onClick={() => window.location.reload()} className="mt-6">Tentar Novamente</Button>
+  // 2. TELA DE ESPERA (AGUARDANDO PAGAMENTO)
+  const renderWaiting = () => (
+    <div className="max-w-md mx-auto text-center space-y-8">
+        <Card className="border-amber-500/20">
+            <CardContent className="pt-10 pb-10 flex flex-col items-center">
+                <div className="relative w-32 h-32 mb-8">
+                    <div className="absolute inset-0 border-4 border-slate-700 rounded-full"></div>
+                    <div className="absolute inset-0 border-4 border-amber-500 rounded-full border-t-transparent animate-spin"></div>
+                    <div className="absolute inset-0 flex items-center justify-center text-4xl font-bold text-amber-500">
+                        {countdown}
+                    </div>
+                </div>
+                <h2 className="text-2xl font-bold text-white mb-2">Verificando Pagamento...</h2>
+                <p className="text-gray-400">Mantenha esta página aberta. Assim que o banco confirmar, seu relatório aparecerá aqui automaticamente.</p>
             </CardContent>
         </Card>
-      </div>
+        <Button variant="ghost" onClick={() => window.open(KIWIFY_CHECKOUT_URL, '_blank')}>
+            Não abriu o checkout? Clique aqui.
+        </Button>
+    </div>
+  );
+
+  // 3. RELATÓRIO FINAL (A ENTREGA)
+  const renderReport = () => (
+    <div className="space-y-8 animate-fade-in">
+        <header className="text-center space-y-2">
+            <div className="inline-flex items-center gap-2 px-4 py-1 rounded-full bg-green-500/10 text-green-400 border border-green-500/20 mb-4">
+                <CheckCircle className="w-4 h-4" /> Pagamento Confirmado
+            </div>
+            <h1 className="text-4xl font-extrabold text-white">Dossiê Comportamental Completo</h1>
+            <p className="text-gray-400">Gerado exclusivamente para o seu perfil.</p>
+        </header>
+
+        <div className="grid md:grid-cols-2 gap-8">
+            <Card>
+                <CardHeader><CardTitle>Visão Geral Gráfica</CardTitle></CardHeader>
+                <CardContent className="flex items-center justify-center h-80">
+                    <Radar data={radarData} options={{ scales: { r: { grid: { color: '#334155' }, ticks: { display: false }, pointLabels: { color: '#94a3b8', font: { size: 12 } } } }, plugins: { legend: { display: false } } }} />
+                </CardContent>
+            </Card>
+
+            <div className="space-y-4">
+                {/* FOCO */}
+                <Card className="border-l-4 border-l-blue-500">
+                    <CardHeader className="pb-2"><CardTitle className="text-blue-400 flex justify-between"><span>Foco</span> <span className="text-white">{reportData?.scores.Foco.toFixed(1)}/5.0</span></CardTitle></CardHeader>
+                    <CardContent><p className="text-gray-300 leading-relaxed">{reportData?.interpretations.Foco}</p></CardContent>
+                </Card>
+                 {/* PRODUTIVIDADE */}
+                 <Card className="border-l-4 border-l-amber-500">
+                    <CardHeader className="pb-2"><CardTitle className="text-amber-400 flex justify-between"><span>Produtividade</span> <span className="text-white">{reportData?.scores.Produtividade.toFixed(1)}/5.0</span></CardTitle></CardHeader>
+                    <CardContent><p className="text-gray-300 leading-relaxed">{reportData?.interpretations.Produtividade}</p></CardContent>
+                </Card>
+                 {/* RESILIENCIA */}
+                 <Card className="border-l-4 border-l-purple-500">
+                    <CardHeader className="pb-2"><CardTitle className="text-purple-400 flex justify-between"><span>Resiliência</span> <span className="text-white">{reportData?.scores.Resiliência.toFixed(1)}/5.0</span></CardTitle></CardHeader>
+                    <CardContent><p className="text-gray-300 leading-relaxed">{reportData?.interpretations.Resiliência}</p></CardContent>
+                </Card>
+            </div>
+
+            <Card>
+                <CardHeader><CardTitle className="flex items-center gap-2"><Award className="text-yellow-500"/> Plano de Ação Personalizado</CardTitle></CardHeader>
+                <CardContent>
+                    <ul className="grid gap-4 sm:grid-cols-2">
+                        {reportData?.recommendations.map((rec, i) => (
+                            <li key={i} className="flex gap-4 bg-slate-800/50 p-4 rounded-lg border border-slate-700/50">
+                                <div className="flex-shrink-0 w-8 h-8 rounded-full bg-amber-500/20 flex items-center justify-center text-amber-500 font-bold">{i+1}</div>
+                                <span className="text-gray-300">{rec}</span>
+                            </li>
+                        ))}
+                    </ul>
+                </CardContent>
+            </Card>
+
+            <div className="flex justify-center gap-4">
+                <Button variant="outline" onClick={() => window.print()}><Download className="mr-2 w-4 h-4"/> Salvar PDF</Button>
+                <Button variant="ghost" onClick={onRestart}>Sair</Button>
+            </div>
+        </div>
     );
   }
 
-  if (viewState === 'success' && reportData) {
-    return <ReportScreen reportData={reportData} onRestart={onRestart} />
-  }
+ const renderError = () => (
+    <div className="max-w-md mx-auto text-center">
+        <Card className="border-red-500/50">
+            <CardContent className="pt-8">
+                <AlertCircle className="w-16 h-16 text-red-500 mx-auto mb-6" />
+                <h2 className="text-2xl font-bold text-gray-100 mb-2">Ocorreu um Erro</h2>
+                <p className="text-gray-400">{errorMessage}</p>
+                 <Button onClick={() => setPaymentStage('selection')} className="mt-6">Tentar Novamente</Button>
+            </CardContent>
+        </Card>
+    </div>
+ )
 
-  return null;
+  return (
+    <div className="min-h-screen bg-slate-900 p-4 sm:p-8 flex items-center justify-center">
+      <div key={paymentStage} className="w-full max-w-4xl animate-fade-in">
+        {paymentStage === 'preview' && renderPreview()}
+        {paymentStage === 'selection' && renderPaymentSelection()}
+        {paymentStage === 'waiting' && renderPaymentWaiting()}
+        {paymentStage === 'success' && renderReportContent()}
+        {paymentStage === 'error' && renderError()}
+      </div>
+    </div>
+  );
 }
