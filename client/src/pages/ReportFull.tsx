@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { fetchFullReport, FullReportData } from '../services/apiService';
 import { Card, CardContent } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
-import { CheckCircle, Target, TrendingUp, Lock, Download, LogOut, Share2, Copy } from 'lucide-react';
+import { CheckCircle, Target, TrendingUp, Lock, Download, LogOut, Share2 } from 'lucide-react';
 import { Radar } from 'react-chartjs-2';
 import {
   Chart as ChartJS,
@@ -37,14 +37,22 @@ export const ReportFull: React.FC<ReportFullProps> = ({ transactionId, onRestart
   useEffect(() => {
     const loadReport = async () => {
       try {
+        console.log("Iniciando carregamento do relatório completo...");
         const data = await fetchFullReport(transactionId);
+        console.log("Dados recebidos:", data);
+        
+        // Validação básica para evitar tela branca
+        if (!data || !data.dimensions) {
+          throw new Error("Dados do relatório incompletos.");
+        }
+        
         setReport(data);
       } catch (err: any) {
+        console.error("Erro detalhado no ReportFull:", err);
         if (err.message === 'PAYMENT_REQUIRED') {
           setError('PAYMENT_REQUIRED');
         } else {
-          console.error(err);
-          setError('Falha ao carregar o relatório.');
+          setError('Falha ao carregar o relatório. Tente recarregar a página.');
         }
       } finally {
         setLoading(false);
@@ -55,8 +63,6 @@ export const ReportFull: React.FC<ReportFullProps> = ({ transactionId, onRestart
 
   const handleShare = async () => {
     const url = window.location.href;
-    
-    // Tenta usar o compartilhamento nativo do celular (WhatsApp, etc)
     if (navigator.share) {
       try {
         await navigator.share({
@@ -68,7 +74,6 @@ export const ReportFull: React.FC<ReportFullProps> = ({ transactionId, onRestart
         console.log('Compartilhamento cancelado');
       }
     } else {
-      // Fallback para copiar link
       navigator.clipboard.writeText(url);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
@@ -102,15 +107,26 @@ export const ReportFull: React.FC<ReportFullProps> = ({ transactionId, onRestart
       </div>
     );
   }
+  
+  if (error) {
+    return (
+      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center text-white p-4 text-center">
+         <p className="text-red-400 mb-4">{error}</p>
+         <Button onClick={() => window.location.reload()}>Tentar Novamente</Button>
+      </div>
+    );
+  }
 
   if (!report) return null;
 
+  // Configuração segura do Gráfico (com fallbacks)
+  const safeDimensions = report.dimensions || [];
   const chartData = {
-    labels: report.dimensions.map(d => d.name),
+    labels: safeDimensions.map(d => d.name || 'Dimensão'),
     datasets: [
       {
         label: 'Seu Perfil',
-        data: report.dimensions.map(d => d.score),
+        data: safeDimensions.map(d => d.score || 0),
         backgroundColor: 'rgba(245, 158, 11, 0.2)',
         borderColor: 'rgba(245, 158, 11, 1)',
         borderWidth: 2,
@@ -149,7 +165,6 @@ export const ReportFull: React.FC<ReportFullProps> = ({ transactionId, onRestart
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 font-sans pb-20 animate-fade-in print-content">
       
-      {/* Header do Relatório */}
       <header className="bg-slate-900 border-b border-slate-800 sticky top-0 z-20 shadow-lg no-print">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 py-4 flex flex-col sm:flex-row justify-between items-center gap-4">
           
@@ -181,28 +196,25 @@ export const ReportFull: React.FC<ReportFullProps> = ({ transactionId, onRestart
 
       <main className="max-w-6xl mx-auto px-4 sm:px-6 py-10 space-y-12">
         
-        {/* 1. ARQUÉTIPO */}
         <section className="text-center space-y-6 break-inside-avoid">
           <div className="inline-flex items-center justify-center px-4 py-1.5 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-500 text-xs font-bold tracking-widest uppercase no-print">
             Resultado da Análise
           </div>
           
           <h1 className="text-4xl md:text-6xl font-extrabold text-white tracking-tight leading-tight">
-            {report.archetype}
+            {report.archetype || "Perfil em Análise"}
           </h1>
           
           <Card className="bg-gradient-to-b from-slate-900 to-slate-950 border-slate-800 shadow-2xl max-w-4xl mx-auto">
             <CardContent className="p-8 sm:p-10">
                 <p className="text-lg md:text-xl text-slate-300 leading-relaxed italic">
-                "{report.summary}"
+                "{report.summary || "Gerando resumo..."}"
                 </p>
             </CardContent>
           </Card>
         </section>
 
-        {/* 2. DASHBOARD */}
         <section className="grid lg:grid-cols-2 gap-8 items-center break-inside-avoid">
-          
           <Card className="h-[400px] flex items-center justify-center p-4 bg-slate-900 border-slate-800 relative overflow-hidden">
              <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-amber-500 to-orange-600 opacity-50"></div>
              <div className="w-full h-full relative z-10">
@@ -221,7 +233,7 @@ export const ReportFull: React.FC<ReportFullProps> = ({ transactionId, onRestart
              </div>
              
              <div className="space-y-4">
-               {report.dimensions.map((dim) => (
+               {safeDimensions.map((dim) => (
                  <div key={dim.name} className="group">
                    <div className="flex justify-between items-end mb-2">
                      <span className={`font-medium text-sm ${dim.score > 75 ? 'text-green-400' : dim.score < 40 ? 'text-red-400' : 'text-slate-200'}`}>
@@ -241,24 +253,22 @@ export const ReportFull: React.FC<ReportFullProps> = ({ transactionId, onRestart
           </div>
         </section>
 
-        {/* 3. PONTO CEGO */}
         <section className="break-inside-avoid">
             <Card className="border-red-500/30 bg-gradient-to-r from-red-950/20 to-slate-900/50">
             <CardContent className="p-8 flex flex-col md:flex-row gap-6 items-start">
-                <div className="bg-red-500/10 p-4 rounded-full shrink-0 border border-red-500/20">
+                <div className="bg-red-500/10 p-4 rounded-full shrink-0 border border-red-500/20 shadow-[0_0_15px_rgba(239,68,68,0.2)]">
                 <Lock className="text-red-500 w-8 h-8" />
                 </div>
                 <div>
                 <h3 className="text-xl font-bold text-white mb-2">Ponto Cego Crítico Identificado</h3>
                 <p className="text-red-200/80 leading-relaxed text-lg">
-                    {report.blindSpot}
+                    {report.blindSpot || "Em análise..."}
                 </p>
                 </div>
             </CardContent>
             </Card>
         </section>
 
-        {/* 4. ANÁLISE DETALHADA */}
         <section className="space-y-6 break-inside-avoid">
           <div className="flex items-center gap-4 mb-4">
             <div className="h-px flex-1 bg-slate-800"></div>
@@ -267,7 +277,7 @@ export const ReportFull: React.FC<ReportFullProps> = ({ transactionId, onRestart
           </div>
           
           <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-            {report.dimensions.map((dim) => (
+            {safeDimensions.map((dim) => (
               <Card key={dim.name} className="bg-slate-800/30 break-inside-avoid">
                 <CardContent className="p-6">
                   <div className="flex justify-between items-start mb-4">
@@ -283,14 +293,13 @@ export const ReportFull: React.FC<ReportFullProps> = ({ transactionId, onRestart
           </div>
         </section>
 
-        {/* 5. PLANO DE AÇÃO */}
         <section className="bg-slate-900 rounded-3xl p-8 md:p-12 border border-slate-800 relative overflow-hidden break-inside-avoid">
           <h3 className="text-2xl md:text-3xl font-bold text-white mb-10 text-center relative z-10">
             Seu Plano de Ação Imediato
           </h3>
           
           <div className="space-y-6 max-w-3xl mx-auto relative z-10">
-            {report.actionPlan.map((action, idx) => (
+            {(report.actionPlan || []).map((action, idx) => (
               <div key={idx} className="flex gap-6 items-start">
                 <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-amber-600 text-white font-bold text-lg flex items-center justify-center">
                   {idx + 1}
