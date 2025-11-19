@@ -1,91 +1,57 @@
-import { Answers, ReportData, QuizQuestion } from '../types';
+import { QuizData, ReportData } from '../types';
 
-// CORREÇÃO CRÍTICA:
-// Mudamos de 'http://localhost:4000/api' para apenas '/api'.
-// Isso faz com que o navegador use automaticamente o endereço correto do site no Render.
+// CORREÇÃO: Caminho relativo para funcionar tanto localmente quanto no Render
 const API_BASE_URL = '/api';
 
 /**
- * Envia as respostas e as perguntas do quiz para o backend.
- * @param answers - As respostas do usuário.
- * @param questions - As perguntas que foram feitas ao usuário.
- * @returns O ID da transação criada.
+ * Envia os dados do quiz para o backend para iniciar o checkout.
+ * @param quizData - Os dados do quiz (respostas e perguntas).
+ * @returns O ID da transação e a URL de checkout.
  */
-export const submitQuizAnswers = async (answers: Answers, questions: QuizQuestion[]): Promise<{ transactionId: string }> => {
-  console.log('Enviando respostas e perguntas para o backend...');
-  try {
-    const response = await fetch(`${API_BASE_URL}/quiz/submit`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ answers, questions }),
-    });
-    if (!response.ok) {
-      throw new Error(`Erro ${response.status}: Falha ao enviar respostas.`);
-    }
-    return response.json();
-  } catch (error) {
-    console.error("Erro de conexão:", error);
-    throw error;
-  }
-};
-
-/**
- * Verifica o status de pagamento de uma transação com o backend.
- * @param transactionId - O ID da transação a ser verificada.
- * @returns O status atual da transação ('PENDING' ou 'PAID').
- */
-export const checkPaymentStatus = async (transactionId: string): Promise<{ status: 'PENDING' | 'PAID' }> => {
-  const response = await fetch(`${API_BASE_URL}/payment/status/${transactionId}`);
+export const startCheckout = async (quizData: QuizData): Promise<{ transactionId: string, checkoutUrl: string }> => {
+  console.log('Iniciando checkout com o backend...');
+  // CORREÇÃO: Rota atualizada para bater com o server.js (/start-checkout)
+  const response = await fetch(`${API_BASE_URL}/start-checkout`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(quizData),
+  });
+  
   if (!response.ok) {
-    throw new Error('Falha ao verificar o status do pagamento.');
+    const errorData = await response.json().catch(() => ({ message: 'Falha ao iniciar o processo de checkout.' }));
+    throw new Error(errorData.message || 'Falha de comunicação com o servidor.');
   }
   return response.json();
 };
 
 /**
- * SIMULAÇÃO: Marca uma transação como paga no backend para testes.
- * @param transactionId - O ID da transação a ser marcada como paga.
- */
-export const simulateSuccessfulPayment = async (transactionId: string): Promise<void> => {
-    console.log(`SIMULANDO pagamento para ${transactionId}...`);
-    const response = await fetch(`${API_BASE_URL}/payment/simulate/${transactionId}`, {
-      method: 'POST',
-    });
-    if (!response.ok) {
-      throw new Error('Falha ao simular o pagamento.');
-    }
-};
-
-/**
- * Solicita a prévia persuasiva do relatório gerada pela IA.
- * @param answers - As respostas do usuário.
- * @param questions - As perguntas feitas.
- * @returns O texto da prévia.
- */
-export const fetchReportPreview = async (answers: Answers, questions: QuizQuestion[]): Promise<string> => {
-    console.log(`Solicitando prévia do relatório da IA...`);
-    const response = await fetch(`${API_BASE_URL}/report/preview`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ answers, questions }),
-    });
-    if (!response.ok) {
-        throw new Error('Falha ao gerar a prévia do relatório.');
-    }
-    const data = await response.json();
-    return data.previewText;
-};
-
-/**
- * Solicita o relatório completo gerado pela IA ao backend após pagamento.
- * @param transactionId - O ID da transação paga.
+ * Solicita o relatório completo gerado pela IA ao backend após o retorno do pagamento.
+ * @param transactionId - O ID da transação.
  * @returns Os dados completos do relatório.
  */
 export const fetchReportData = async (transactionId: string): Promise<ReportData> => {
     console.log(`Solicitando relatório completo para a transação ${transactionId}...`);
-    const response = await fetch(`${API_BASE_URL}/report/full/${transactionId}`);
+    const response = await fetch(`${API_BASE_URL}/get-report`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ transactionId }),
+    });
     if (!response.ok) {
-        throw new Error('Falha ao obter os dados do relatório completo.');
+        const errorData = await response.json().catch(() => ({ message: 'Falha ao obter os dados do relatório completo.' }));
+        throw new Error(errorData.message);
     }
     return response.json();
+};
+
+// Funções auxiliares mantidas para compatibilidade caso necessárias, mas o fluxo principal usa as acima.
+export const checkPaymentStatus = async (transactionId: string): Promise<{ status: 'PENDING' | 'PAID' }> => {
+    return { status: 'PENDING' };
+};
+
+export const simulateSuccessfulPayment = async (transactionId: string): Promise<void> => {
+    console.log('Simulação de pagamento acionada');
+};
+
+export const fetchReportPreview = async (answers: any): Promise<string> => {
+    return "Prévia indisponível neste fluxo.";
 };
