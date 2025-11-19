@@ -1,13 +1,12 @@
 import { QuizQuestion } from '../types';
 
-// Banco de perguntas alinhado com as 5 novas dimensões do backend.
 export const ALL_QUESTIONS: QuizQuestion[] = [
   // Foco
   { id: 1, module: "Foco", text: "Eu defino prioridades claras para minhas tarefas diárias." },
-  { id: 2, module: "Foco", text: "Consigo me concentrar em uma única tarefa por longos períodos sem me distrair." },
-  { id: 3, module: "Foco", text: "Meu ambiente de trabalho é organizado para minimizar interrupções." },
-  { id: 4, module: "Foco", text: "Eu sei dizer 'não' a solicitações que desviam dos meus objetivos principais." },
-  { id: 5, module: "Foco", text: "Eu divido grandes projetos em etapas menores e gerenciáveis." },
+  { id: 2, module: "Foco", text: "Consigo manter o foco em objetivos de longo prazo sem me desviar." },
+  { id: 3, module: "Foco", text: "Minimizo facilmente as distrações (notificações, conversas) quando preciso me concentrar." },
+  { id: 4, module: "Foco", text: "Planejo meu dia de forma estruturada para maximizar minha eficiência." },
+  { id: 5, module: "Foco", text: "Tenho o hábito de revisar periodicamente o andamento dos meus objetivos." },
 
   // Adaptabilidade
   { id: 6, module: "Adaptabilidade", text: "Eu me sinto confortável com mudanças inesperadas nos planos." },
@@ -48,6 +47,6 @@ const shuffleArray = <T>(array: T[]): T[] => {
   return shuffled;
 };
 
-export const getQuizQuestions = (count: number = 25): QuizQuestion[] => {
+export const getRandomQuestions = (count: number = 25): QuizQuestion[] => {
   return shuffleArray(ALL_QUESTIONS).slice(0, count);
 };
