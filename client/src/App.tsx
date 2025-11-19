@@ -1,82 +1,71 @@
-import { useEffect, useState } from 'react';
-import Home from './pages/Home';
-import Quiz from './pages/Quiz';
-import Report from './pages/Report';
-import { QuizData } from './types';
-import usePersistedState from './hooks/usePersistedState';
-// Importante: Importar o CSS global para o Tailwind funcionar
-import './index.css';
+import React, { useState, useEffect } from 'react';
+import { Home } from './pages/Home';
+import { Quiz } from './pages/Quiz';
+import { ReportPreview } from './pages/ReportPreview';
+import { ReportFull } from './pages/ReportFull';
 
-type Page = 'home' | 'quiz' | 'report';
+// URL do seu produto no Kiwify (Obtida nos prints)
+const KIWIFY_BASE_URL = 'https://pay.kiwify.com.br/RHpnrVL';
+
+type AppState = 'home' | 'quiz' | 'preview' | 'full_report';
 
 function App() {
-  const [page, setPage] = useState<Page>('home');
-  
-  // Usa a memória do navegador para não perder os dados quando for para a Kiwify
-  const [quizData, setQuizData] = usePersistedState<QuizData | null>('quizData', null);
-  const [transactionId, setTransactionId] = usePersistedState<string | null>('transactionId', null);
+  const [view, setView] = useState<AppState>('home');
+  const [transactionId, setTransactionId] = useState<string | null>(null);
 
-  // Efeito para detectar quando o usuário VOLTA do pagamento
+  // Verifica a URL ao carregar para ver se o usuário voltou do Kiwify
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    // A Kiwify manda o ID de volta no parâmetro 'aff_content'
-    const urlTransactionId = params.get('aff_content');
-
-    if (urlTransactionId && quizData) {
-      console.log("Retorno do pagamento detectado. Indo para relatório.");
-      setTransactionId(urlTransactionId);
-      setPage('report');
-      // Limpa a URL para ficar bonita
+    // O Kiwify manda o ID de volta no parâmetro 'aff_content' (que configuramos no checkout)
+    // Mas vamos verificar outros parâmetros também por segurança.
+    const urlTid = params.get('aff_content') || params.get('tid') || params.get('transactionId');
+    
+    if (urlTid) {
+      console.log("[APP] Retorno do pagamento detectado:", urlTid);
+      setTransactionId(urlTid);
+      // Se tiver ID na URL, assume que é para ver o relatório (Backend vai bloquear se não pagou)
+      setView('full_report');
+      
+      // Limpa a URL para ficar mais bonita (opcional)
       window.history.replaceState({}, document.title, window.location.pathname);
     }
-  }, [quizData, setTransactionId]);
+  }, []);
 
+  const handleStartQuiz = () => setView('quiz');
 
-  const handleStartQuiz = () => {
-    setQuizData(null);
-    setTransactionId(null);
-    setPage('quiz');
+  const handleQuizComplete = (tid: string) => {
+    console.log("Quiz finalizado. ID da Transação:", tid);
+    setTransactionId(tid);
+    setView('preview');
   };
 
-  const handleCompleteQuiz = (data: { transactionId: string, quizData: QuizData }) => {
-    console.log("Quiz completo. Salvando dados e preparando redirecionamento.");
-    setQuizData(data.quizData);
-    setTransactionId(data.transactionId);
-    // O redirecionamento real acontece dentro do componente Quiz, aqui só salvamos o estado
-  };
-  
-  const handleRestart = () => {
-    setQuizData(null);
-    setTransactionId(null);
-    setPage('home');
-  };
-
-  const renderPage = () => {
-    switch (page) {
-      case 'quiz':
-        return <Quiz onComplete={handleCompleteQuiz} onCancel={handleRestart} />;
-      case 'report':
-        // Só mostra o relatório se tivermos o ID da transação e os dados
-        if (transactionId && quizData) {
-          return <Report 
-            transactionId={transactionId} 
-            answers={quizData.answers} 
-            questions={quizData.questions} 
-            onRestart={handleRestart} 
-          />;
-        }
-        // Se algo der errado, volta para o início
-        setPage('home');
-        return <Home onStartQuiz={handleStartQuiz} />;
-      case 'home':
-      default:
-        return <Home onStartQuiz={handleStartQuiz} />;
+  const handleUnlockReport = () => {
+    if (transactionId) {
+      // REDIRECIONAMENTO PARA O KIWIFY
+      // Passamos o ID no 'aff_content' para rastrear no webhook
+      // Isso é CRUCIAL para a integração funcionar
+      const checkoutUrl = `${KIWIFY_BASE_URL}?aff_content=${transactionId}`;
+      console.log("Redirecionando para:", checkoutUrl);
+      window.location.href = checkoutUrl;
     }
   };
 
   return (
-    <div className="bg-slate-900 text-gray-200 min-h-screen font-sans">
-      {renderPage()}
+    <div className="bg-slate-950 text-slate-100 min-h-screen font-sans selection:bg-amber-500/30 selection:text-amber-900">
+      {view === 'home' && <Home onStart={handleStartQuiz} />}
+      
+      {view === 'quiz' && <Quiz onComplete={handleQuizComplete} />}
+      
+      {view === 'preview' && transactionId && (
+        <ReportPreview 
+          transactionId={transactionId} 
+          onUnlock={handleUnlockReport} 
+        />
+      )}
+      
+      {view === 'full_report' && transactionId && (
+        <ReportFull transactionId={transactionId} />
+      )}
     </div>
   );
 }
