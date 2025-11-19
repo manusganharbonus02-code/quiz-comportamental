@@ -2,20 +2,38 @@
 @tailwind components;
 @tailwind utilities;
 
-@layer base {
-  :root {
-    color-scheme: dark;
+:root {
+  color-scheme: dark;
+}
+
+body {
+  background-color: #020617; /* slate-950 */
+  color: #f8fafc;
+}
+
+/* CONFIGURAÇÃO DE IMPRESSÃO (PDF) */
+@media print {
+  @page {
+    margin: 0;
+    size: auto;
   }
+  
   body {
-    @apply bg-slate-900 text-gray-100;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+    background-color: #020617 !important;
+    color: #000 !important; /* Fallback */
   }
-}
 
-@keyframes fadeIn {
-  from { opacity: 0; transform: translateY(10px); }
-  to { opacity: 1; transform: translateY(0); }
-}
+  /* Esconde botões na hora de gerar o PDF */
+  .no-print {
+    display: none !important;
+  }
 
-.animate-fade-in {
-  animation: fadeIn 0.5s ease-in-out forwards;
+  /* Ajustes para o PDF ficar bonito */
+  .print-content {
+    padding: 20px !important;
+    background-color: #020617 !important;
+    color: #fff !important;
+  }
 }
