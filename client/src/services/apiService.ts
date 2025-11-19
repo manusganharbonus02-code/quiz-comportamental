@@ -1,55 +1,79 @@
-import { QuizData, ReportData } from '../types';
+import { QuizData, ReportData, Answers, QuizQuestion } from '../types';
 
+// O caminho relativo '/api' é o correto para produção no Render.
 const API_BASE_URL = '/api';
 
+/**
+ * Envia os dados do quiz para o backend para iniciar o checkout.
+ * @param quizData - Os dados do quiz (respostas e perguntas).
+ * @returns O ID da transação e a URL de checkout.
+ */
 export const startCheckout = async (quizData: QuizData): Promise<{ transactionId: string, checkoutUrl: string }> => {
-  console.log('Iniciando checkout...');
-  try {
-    const response = await fetch(`${API_BASE_URL}/start-checkout`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(quizData),
-    });
-    
-    if (!response.ok) {
-      // Tenta ler o erro como texto se não for JSON
-      const errorText = await response.text();
-      console.error('Erro do servidor:', response.status, errorText);
-      let errorMessage = `Erro do servidor: ${response.status}`;
-      try {
-        const json = JSON.parse(errorText);
-        errorMessage = json.message || errorMessage;
-      } catch (e) {
-        // Se não for JSON, usa o texto puro (pode ser erro 404 ou 500 do Render)
-        if (response.status === 404) errorMessage = "Erro de conexão: Rota não encontrada (404). O servidor pode estar desatualizado.";
-        else if (response.status === 502) errorMessage = "O servidor está reiniciando ou indisponível (502). Tente novamente em instantes.";
-        else errorMessage = `Erro inesperado: ${response.status}`;
-      }
-      throw new Error(errorMessage);
-    }
-    return response.json();
-  } catch (error: any) {
-    console.error('Falha no fetch:', error);
-    throw new Error(error.message || 'Falha de rede ao contatar o servidor.');
+  console.log('Iniciando checkout com o backend...');
+  const response = await fetch(`${API_BASE_URL}/start-checkout`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(quizData),
+  });
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({ message: 'Falha ao iniciar o processo de checkout.' }));
+    throw new Error(errorData.message);
+  }
+  return response.json();
+};
+
+/**
+ * Verifica o status de pagamento de uma transação com o backend.
+ */
+export const checkPaymentStatus = async (transactionId: string): Promise<{ status: 'PENDING' | 'PAID' }> => {
+  const response = await fetch(`${API_BASE_URL}/payment/status/${transactionId}`);
+  if (!response.ok) {
+    throw new Error('Falha ao verificar o status do pagamento.');
+  }
+  return response.json();
+};
+
+/**
+ * SIMULAÇÃO: Marca uma transação como paga no backend para testes.
+ */
+export const simulateSuccessfulPayment = async (transactionId: string): Promise<void> => {
+  const response = await fetch(`${API_BASE_URL}/payment/simulate/${transactionId}`, {
+    method: 'POST',
+  });
+  if (!response.ok) {
+    throw new Error('Falha ao simular o pagamento.');
   }
 };
 
+/**
+ * Solicita a prévia do relatório gerada pela IA ao backend.
+ */
+export const fetchReportPreview = async (answers: Answers, questions: QuizQuestion[]): Promise<string> => {
+  const response = await fetch(`${API_BASE_URL}/report/preview`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ answers, questions }),
+  });
+  if (!response.ok) {
+      throw new Error('Falha ao gerar a prévia do relatório.');
+  }
+  const data = await response.json();
+  return data.previewText;
+};
+
+/**
+ * Solicita o relatório completo ao backend após o retorno do pagamento.
+ */
 export const fetchReportData = async (transactionId: string): Promise<ReportData> => {
+    console.log(`Solicitando relatório completo para a transação ${transactionId}...`);
     const response = await fetch(`${API_BASE_URL}/get-report`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ transactionId }),
     });
     if (!response.ok) {
-        const errorText = await response.text();
-        let message = 'Falha ao obter relatório.';
-        try { message = JSON.parse(errorText).message || message; } catch {}
-        throw new Error(message);
+        const errorData = await response.json().catch(() => ({ message: 'Falha ao obter os dados do relatório completo.' }));
+        throw new Error(errorData.message);
     }
     return response.json();
 };
-
-// Funções auxiliares vazias para manter compatibilidade
-export const checkPaymentStatus = async (transactionId: string) => ({ status: 'PENDING' });
-export const simulateSuccessfulPayment = async (transactionId: string) => {};
-export const fetchReportPreview = async (answers: any) => "";
