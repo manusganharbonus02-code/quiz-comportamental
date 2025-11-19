@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import React, { useState } from 'react';
 import { Button } from '../components/ui/Button';
 import { Card, CardContent } from '../components/ui/Card';
 import { ArrowLeft, ArrowRight, Loader2, AlertCircle } from 'lucide-react';
@@ -7,7 +7,6 @@ import { Answers, QuizData } from '../types';
 import { getQuizQuestions } from '../services/questionBank';
 
 interface QuizPageProps {
-  // CORREÇÃO: A função onComplete agora recebe o objeto com a URL de checkout
   onComplete: (data: { checkoutUrl: string, quizData: QuizData }) => void;
   onCancel: () => void;
 }
@@ -20,14 +19,13 @@ const ANSWER_OPTIONS = [
     { value: 5, label: "Concordo Totalmente" },
 ];
 
-// Mapeamento para exibir nomes bonitos na tela, correspondendo às 5 dimensões
 const DIMENSION_NAMES: Record<string, string> = {
   Foco: "Foco",
   Adaptabilidade: "Adaptabilidade",
   AgressorRotina: "Inovação",
   MatadorDragoes: "Coragem",
   RadarSocial: "Inteligência Social",
-};
+}
 
 export default function QuizPage({ onComplete, onCancel }: QuizPageProps) {
   const [quizQuestions] = useState(() => getQuizQuestions(25));
@@ -47,7 +45,7 @@ export default function QuizPage({ onComplete, onCancel }: QuizPageProps) {
     setTimeout(() => {
         setCurrentQuestion(newIndex);
         setIsFading(false);
-    }, 300);
+    }, 300); // Deve corresponder à duração da transição do CSS
   };
 
   const handleAnswer = (value: number) => {
@@ -79,24 +77,20 @@ export default function QuizPage({ onComplete, onCancel }: QuizPageProps) {
 
     setIsSubmitting(true);
     try {
-      // CORREÇÃO: Prepara o pacote completo de dados (perguntas + respostas)
-      const quizData: QuizData = { answers, questions: quizQuestions };
-      
-      // CORREÇÃO: Chama a nova função de checkout
+      const quizData: QuizData = { questions: quizQuestions, answers };
+      // Chama a nova função para iniciar o checkout
       const { checkoutUrl } = await startCheckout(quizData);
-      
-      // CORREÇÃO: Passa os dados corretos para o App.tsx fazer o redirecionamento
+      // Passa a URL e os dados do quiz para o App.tsx
       onComplete({ checkoutUrl, quizData });
     } catch (err: any) {
       setError(err.message || "Ocorreu um erro ao enviar suas respostas. Tente novamente.");
-      console.error(err);
     } finally {
       setIsSubmitting(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-slate-900 p-4 flex items-center justify-center">
+    <div className="min-h-screen bg-slate-900 p-4 flex items-center justify-center animate-fade-in">
       <div className="w-full max-w-2xl mx-auto">
         <div className="mb-6 text-center">
           <p className="text-gray-400 font-semibold">Pergunta {currentQuestion + 1} de {quizQuestions.length}</p>
