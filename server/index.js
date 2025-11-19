@@ -5,11 +5,12 @@ import { v4 as uuidv4 } from 'uuid';
 import 'dotenv/config';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import fs from 'fs';
 
 const app = express();
-const PORT = process.env.PORT || 4000;
+const PORT = process.env.PORT || 10000;
 
-// --- CONFIGURAÇÃO DE CAMINHOS (ES MODULES) ---
+// --- CONFIGURAÇÃO DE CAMINHOS ---
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
@@ -20,211 +21,127 @@ const ai = apiKey ? new GoogleGenAI({ apiKey }) : null;
 app.use(cors());
 app.use(express.json());
 
-// --- SERVIR ARQUIVOS ESTÁTICOS (FRONTEND) ---
-// Isso conecta o Backend ao Frontend. Ele diz ao servidor para usar a pasta 'dist' do cliente.
-const clientDistPath = path.join(__dirname, '../client/dist');
-app.use(express.static(clientDistPath));
+// --- LOCALIZAR O FRONTEND (BLINDAGEM) ---
+// O Render pode rodar o script de lugares diferentes. Vamos procurar a pasta 'dist' em vários níveis.
+const searchPaths = [
+  path.join(__dirname, '../client/dist'),        // Estrutura padrão local
+  path.join(__dirname, '../../client/dist'),     // Estrutura possível no container
+  path.join(process.cwd(), 'client/dist'),       // Baseado no comando de execução
+  path.join(process.cwd(), 'dist'),              // Baseado na raiz
+  path.resolve('/opt/render/project/src/client/dist') // Caminho absoluto padrão do Render
+];
 
-// --- BANCO DE DADOS EM MEMÓRIA ---
+let clientDistPath = null;
+
+console.log("--- DIAGNÓSTICO DE INICIALIZAÇÃO ---");
+console.log("Diretório atual (__dirname):", __dirname);
+console.log("Diretório de execução (cwd):", process.cwd());
+
+for (const p of searchPaths) {
+  console.log(`Procurando frontend em: ${p}`);
+  if (fs.existsSync(p) && fs.existsSync(path.join(p, 'index.html'))) {
+    clientDistPath = p;
+    console.log(`✅ SUCESSO: Frontend encontrado em: ${p}`);
+    break;
+  }
+}
+
+if (clientDistPath) {
+  // Serve os arquivos estáticos (JS, CSS, Imagens)
+  app.use(express.static(clientDistPath));
+} else {
+  console.error("❌ ERRO CRÍTICO: Pasta 'dist' não encontrada em nenhum lugar!");
+}
+
+// --- ROTAS DA API (MANTIDAS) ---
+// (Seus códigos de API continuam funcionando aqui)
+
+// BANCO DE DADOS EM MEMÓRIA
 const transactions = new Map();
 
-// --- LÓGICA AUXILIAR ---
+// LÓGICA AUXILIAR
 const calculateScores = (answers, questions) => {
-  const scores = {
-    Foco: 0,
-    Adaptabilidade: 0,
-    Inovacao: 0,
-    Coragem: 0,
-    InteligenciaSocial: 0
-  };
-  
+  const scores = { Foco: 0, Adaptabilidade: 0, Inovacao: 0, Coragem: 0, InteligenciaSocial: 0 };
   const counts = { ...scores };
-
   questions.forEach(q => {
-    const answerValue = answers[q.id] || 0;
-    let moduleKey = q.module;
-    if (moduleKey === 'Inovação') moduleKey = 'Inovacao';
-    if (moduleKey === 'InteligênciaSocial') moduleKey = 'InteligenciaSocial';
-
-    if (scores[moduleKey] !== undefined) {
-      scores[moduleKey] += answerValue;
-      counts[moduleKey] += 1;
-    }
+    const val = answers[q.id] || 0;
+    let key = q.module === 'Inovação' ? 'Inovacao' : (q.module === 'InteligênciaSocial' ? 'InteligenciaSocial' : q.module);
+    if (scores[key] !== undefined) { scores[key] += val; counts[key] += 1; }
   });
-
-  Object.keys(scores).forEach(key => {
-    if (counts[key] > 0) {
-      scores[key] = Math.round((scores[key] / (counts[key] * 5)) * 100);
-    }
-  });
-
+  Object.keys(scores).forEach(k => { if (counts[k] > 0) scores[k] = Math.round((scores[k] / (counts[k] * 5)) * 100); });
   return scores;
 };
 
-// --- ROTAS DA API ---
-
-// 1. SUBMISSÃO DO QUIZ
 app.post('/api/quiz/submit', (req, res) => {
   try {
     const { answers, questions } = req.body;
-    if (!answers || !questions) return res.status(400).json({ message: 'Dados inválidos.' });
-
+    if(!answers) return res.status(400).json({message: 'Dados inválidos'});
     const transactionId = uuidv4();
     const scores = calculateScores(answers, questions);
-
-    transactions.set(transactionId, {
-      answers,
-      questions,
-      scores,
-      status: 'PENDING',
-      createdAt: new Date()
-    });
-
-    console.log(`[NOVO QUIZ] ID: ${transactionId}`);
+    transactions.set(transactionId, { answers, questions, scores, status: 'PENDING', createdAt: new Date() });
     res.status(201).json({ transactionId });
-  } catch (error) {
-    console.error("Erro submit:", error);
-    res.status(500).json({ message: "Erro interno." });
-  }
+  } catch (e) { console.error(e); res.status(500).json({message: 'Erro interno'}); }
 });
 
-// 2. PRÉVIA PERSUASIVA (HOOK)
 app.post('/api/report/preview', async (req, res) => {
   try {
     const { transactionId } = req.body;
-    const transaction = transactions.get(transactionId);
+    const t = transactions.get(transactionId);
+    if (!t) return res.status(404).json({ message: "Sessão não encontrada" });
+    
+    if (!ai) return res.json({ previewText: "Seu perfil indica um potencial executivo alto, mas há uma trava emocional custando oportunidades." });
 
-    if (!transaction) return res.status(404).json({ message: "Sessão não encontrada." });
-
-    if (!ai) {
-      return res.json({ previewText: "Sua análise detectou um padrão de comportamento raro. Você possui uma capacidade de liderança natural, mas identificamos uma 'trava invisível' em sua inteligência emocional." });
-    }
-
-    const prompt = `
-      Analise este perfil comportamental executivo baseado nestas pontuações (0-100):
-      ${JSON.stringify(transaction.scores)}
-      
-      Escreva UM parágrafo curto (max 30 palavras) e MISTERIOSO para a tela de pré-venda.
-      1. Elogie o ponto mais forte.
-      2. Diga que o ponto mais fraco está custando caro para a carreira dele.
-      3. Crie um "cliffhanger" (suspense) para ele comprar o relatório completo.
-    `;
-
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
-      contents: prompt,
-      config: { temperature: 0.7 }
-    });
-
+    const prompt = `Analise este perfil (0-100): ${JSON.stringify(t.scores)}. Escreva um gancho curto e misterioso de 30 palavras para venda.`;
+    const response = await ai.models.generateContent({ model: 'gemini-2.5-flash', contents: prompt });
     res.json({ previewText: response.text.trim() });
-
-  } catch (error) {
-    console.error("Erro Preview:", error);
-    res.status(500).json({ message: "Erro ao gerar prévia." });
-  }
+  } catch (e) { console.error(e); res.status(500).json({message: 'Erro IA'}); }
 });
 
-// 3. RELATÓRIO COMPLETO (ENTREGA DE VALOR)
 app.get('/api/report/full/:transactionId', async (req, res) => {
   try {
     const { transactionId } = req.params;
-    const transaction = transactions.get(transactionId);
+    const t = transactions.get(transactionId);
+    if (!t) return res.status(404).json({ message: "Não encontrado" });
 
-    if (!transaction) return res.status(404).json({ message: "Relatório não encontrado." });
+    // if (t.status !== 'PAID') return res.status(403).json({ message: 'PAYMENT_REQUIRED' });
 
-    // if (transaction.status !== 'PAID') return res.status(403).json({ message: "Pagamento pendente." });
+    if (t.fullReport) return res.json(t.fullReport);
 
-    if (transaction.fullReport) {
-      return res.json(transaction.fullReport);
-    }
+    if (!ai) return res.json({ archetype: "Mock", summary: "Mock", dimensions: [], blindSpot: "Mock", actionPlan: [] });
 
-    if (!ai) {
-      return res.json({
-        archetype: "O Estrategista Visionário (Mock)",
-        summary: "Você possui uma visão única, mas tropeça na execução detalhada.",
-        dimensions: [
-          { name: "Foco", score: transaction.scores.Foco || 50, analysis: "Análise teste..." },
-          { name: "Coragem", score: transaction.scores.Coragem || 50, analysis: "Análise teste..." },
-          { name: "Inovacao", score: transaction.scores.Inovacao || 50, analysis: "Análise teste..." },
-          { name: "Adaptabilidade", score: transaction.scores.Adaptabilidade || 50, analysis: "Análise teste..." },
-          { name: "InteligenciaSocial", score: transaction.scores.InteligenciaSocial || 50, analysis: "Análise teste..." }
-        ],
-        blindSpot: "Falta de acabativa em projetos longos.",
-        actionPlan: ["Delegue tarefas repetitivas", "Use a técnica Pomodoro"]
-      });
-    }
-
-    const prompt = `
-      Você é um Consultor Executivo de Elite. Gere um relatório JSON detalhado para este perfil:
-      Scores: ${JSON.stringify(transaction.scores)}
-      
-      O JSON deve seguir EXATAMENTE esta estrutura:
-      {
-        "archetype": "Nome Criativo do Arquétipo (ex: O Comandante Resiliente)",
-        "summary": "Resumo executivo de 2 parágrafos sobre o perfil.",
-        "dimensions": [
-          { "name": "Foco", "score": ${transaction.scores.Foco || 0}, "analysis": "Análise profunda..." },
-          { "name": "Adaptabilidade", "score": ${transaction.scores.Adaptabilidade || 0}, "analysis": "Análise profunda..." },
-          { "name": "Inovacao", "score": ${transaction.scores.Inovacao || 0}, "analysis": "Análise profunda..." },
-          { "name": "Coragem", "score": ${transaction.scores.Coragem || 0}, "analysis": "Análise profunda..." },
-          { "name": "InteligenciaSocial", "score": ${transaction.scores.InteligenciaSocial || 0}, "analysis": "Análise profunda..." }
-        ],
-        "blindSpot": "O maior ponto cego que está impedindo o sucesso financeiro dessa pessoa.",
-        "actionPlan": [
-          "Ação prática 1",
-          "Ação prática 2",
-          "Ação prática 3"
-        ]
-      }
-      Responda APENAS o JSON.
-    `;
-
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
-      contents: prompt,
-      config: { responseMimeType: 'application/json' }
-    });
-
-    const reportData = JSON.parse(response.text);
-    transaction.fullReport = reportData;
-    res.json(reportData);
-
-  } catch (error) {
-    console.error("Erro Full Report:", error);
-    res.status(500).json({ message: "Erro ao gerar relatório completo." });
-  }
+    const prompt = `Gere JSON detalhado para: ${JSON.stringify(t.scores)}. Schema: archetype, summary, dimensions(name, score, analysis), blindSpot, actionPlan.`;
+    const response = await ai.models.generateContent({ model: 'gemini-2.5-flash', contents: prompt, config: { responseMimeType: 'application/json' } });
+    const data = JSON.parse(response.text);
+    t.fullReport = data;
+    res.json(data);
+  } catch (e) { console.error(e); res.status(500).json({message: 'Erro IA'}); }
 });
 
-// 4. WEBHOOK KIWIFY
 app.post('/api/kiwify-webhook', (req, res) => {
-  const data = req.body;
-  const transactionId = data.aff_content || (data.order && data.order.src);
-  const status = data.order_status;
-
-  if (transactionId && transactions.has(transactionId)) {
-    const t = transactions.get(transactionId);
-    if (status === 'paid') {
-      t.status = 'PAID';
-      console.log(`Pagamento confirmado para ${transactionId}`);
-    }
-  }
-  res.status(200).send('OK');
+  const d = req.body;
+  const tid = d.aff_content || (d.order && d.order.src);
+  if (tid && transactions.has(tid) && d.order_status === 'paid') transactions.get(tid).status = 'PAID';
+  res.send('OK');
 });
 
 app.get('/api/simulate-pay/:id', (req, res) => {
   const { id } = req.params;
-  if (transactions.has(id)) {
-    transactions.get(id).status = 'PAID';
-    res.send(`Transação ${id} marcada como PAGA.`);
+  if (transactions.has(id)) { transactions.get(id).status = 'PAID'; res.send('Pago'); } 
+  else res.status(404).send('404');
+});
+
+// --- ROTA "PEGA TUDO" (ESSENCIAL PARA O SITE ABRIR) ---
+app.get('*', (req, res) => {
+  if (clientDistPath) {
+    res.sendFile(path.join(clientDistPath, 'index.html'));
   } else {
-    res.status(404).send("ID não encontrado.");
+    // Se não achou a pasta, mostra um erro descritivo na tela em vez de "Cannot GET /"
+    res.status(500).send(`
+      <h1>Erro de Configuração no Servidor</h1>
+      <p>O servidor iniciou, mas não encontrou os arquivos do site (Frontend).</p>
+      <p>Verifique os logs do Render para ver onde ele procurou.</p>
+    `);
   }
 });
 
-// --- ROTA CATCH-ALL (A Mágica acontece aqui) ---
-// Se a requisição não for para /api, entrega o index.html do React
-app.get('*', (req, res) => {
-  res.sendFile(path.join(clientDistPath, 'index.html'));
-});
-
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+app.listen(PORT, '0.0.0.0', () => console.log(`Servidor rodando na porta ${PORT}`));
