@@ -15,24 +15,34 @@ function App() {
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
+    
+    // Só recupera se vier na URL (retorno do pagamento ou link salvo)
     const urlTid = params.get('tid') || params.get('transactionId') || params.get('aff_content');
-    const localTid = localStorage.getItem('apex_transaction_id');
-
+    
     if (urlTid) {
+      console.log("[APP] ID detectado na URL:", urlTid);
       setTransactionId(urlTid);
-      localStorage.setItem('apex_transaction_id', urlTid);
       setView('full_report');
-    } else if (localTid) {
-      // Se tem ID salvo, tenta mostrar o relatório
-      setTransactionId(localTid);
-      setView('full_report'); 
-    }
+      
+      // Limpa a URL para ficar bonita, mas mantém o estado
+      window.history.replaceState({}, document.title, window.location.pathname);
+    } 
+    // REMOVIDO: A verificação automática do localStorage ao iniciar.
+    // Isso quebrava o fluxo se o ID fosse velho. 
+    // Agora, entrou no site limpo -> Vai para a Home.
   }, []);
 
-  const handleStartQuiz = () => setView('quiz');
+  const handleStartQuiz = () => {
+    // Limpa qualquer resquício anterior ao começar novo
+    setTransactionId(null);
+    localStorage.removeItem('apex_transaction_id');
+    setView('quiz');
+  };
 
   const handleQuizComplete = (tid: string) => {
+    console.log("Quiz finalizado. ID:", tid);
     setTransactionId(tid);
+    // Salvamos apenas temporariamente para o fluxo de compra
     localStorage.setItem('apex_transaction_id', tid);
     setView('preview');
   };
@@ -44,14 +54,11 @@ function App() {
     }
   };
 
-  // FUNÇÃO DE RESET (A CHAVE PARA O SEU PROBLEMA)
+  // Reinicia tudo
   const handleReset = () => {
-    console.log("Resetando aplicação...");
-    localStorage.removeItem('apex_transaction_id'); // Limpa a memória
+    localStorage.removeItem('apex_transaction_id');
     setTransactionId(null);
-    setView('home'); // Volta para a home
-    // Limpa a URL se tiver lixo
-    window.history.replaceState({}, document.title, window.location.pathname);
+    setView('home');
   };
 
   return (
@@ -70,7 +77,7 @@ function App() {
       {view === 'full_report' && transactionId && (
         <ReportFull 
           transactionId={transactionId} 
-          onRestart={handleReset} // Passando a função de reset
+          onRestart={handleReset} 
         />
       )}
     </div>
