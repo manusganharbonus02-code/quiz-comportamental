@@ -4,7 +4,7 @@ import { Quiz } from './pages/Quiz';
 import { ReportPreview } from './pages/ReportPreview';
 import { ReportFull } from './pages/ReportFull';
 
-// URL do seu produto no Kiwify (Obtida nos prints)
+// URL do seu produto no Kiwify
 const KIWIFY_BASE_URL = 'https://pay.kiwify.com.br/RHpnrVL';
 
 type AppState = 'home' | 'quiz' | 'preview' | 'full_report';
@@ -13,41 +13,55 @@ function App() {
   const [view, setView] = useState<AppState>('home');
   const [transactionId, setTransactionId] = useState<string | null>(null);
 
-  // Verifica a URL ao carregar para ver se o usuário voltou do Kiwify
   useEffect(() => {
+    // 1. Tenta recuperar da URL (caso o webhook/link direto funcione)
     const params = new URLSearchParams(window.location.search);
-    // O Kiwify manda o ID de volta no parâmetro 'aff_content' (que configuramos no checkout)
-    // Mas vamos verificar outros parâmetros também por segurança.
-    const urlTid = params.get('aff_content') || params.get('tid') || params.get('transactionId');
+    const urlTid = params.get('tid') || params.get('transactionId') || params.get('aff_content');
     
+    // 2. Tenta recuperar da Memória do Navegador (Salvaguarda)
+    const localTid = localStorage.getItem('apex_transaction_id');
+
     if (urlTid) {
-      console.log("[APP] Retorno do pagamento detectado:", urlTid);
+      console.log("[APP] ID via URL:", urlTid);
       setTransactionId(urlTid);
-      // Se tiver ID na URL, assume que é para ver o relatório (Backend vai bloquear se não pagou)
+      localStorage.setItem('apex_transaction_id', urlTid); // Atualiza local
       setView('full_report');
-      
-      // Limpa a URL para ficar mais bonita (opcional)
-      window.history.replaceState({}, document.title, window.location.pathname);
+    } else if (localTid) {
+      console.log("[APP] ID via LocalStorage:", localTid);
+      setTransactionId(localTid);
+      // Se tem ID salvo, assume que ele foi pagar e voltou. 
+      // O componente ReportFull vai verificar se o pagamento foi aprovado.
+      setView('full_report'); 
     }
   }, []);
 
   const handleStartQuiz = () => setView('quiz');
 
   const handleQuizComplete = (tid: string) => {
-    console.log("Quiz finalizado. ID da Transação:", tid);
+    console.log("Quiz finalizado. ID:", tid);
     setTransactionId(tid);
+    // Salva no navegador para não perder se o usuário fechar a aba
+    localStorage.setItem('apex_transaction_id', tid);
     setView('preview');
   };
 
   const handleUnlockReport = () => {
     if (transactionId) {
-      // REDIRECIONAMENTO PARA O KIWIFY
-      // Passamos o ID no 'aff_content' para rastrear no webhook
-      // Isso é CRUCIAL para a integração funcionar
+      // Garante que está salvo antes de sair do site
+      localStorage.setItem('apex_transaction_id', transactionId);
+      
       const checkoutUrl = `${KIWIFY_BASE_URL}?aff_content=${transactionId}`;
       console.log("Redirecionando para:", checkoutUrl);
       window.location.href = checkoutUrl;
     }
+  };
+
+  // Função para "Sair" ou "Reiniciar" (Limpa a memória)
+  const handleReset = () => {
+    localStorage.removeItem('apex_transaction_id');
+    setTransactionId(null);
+    setView('home');
+    window.history.replaceState({}, document.title, "/");
   };
 
   return (
@@ -64,7 +78,11 @@ function App() {
       )}
       
       {view === 'full_report' && transactionId && (
-        <ReportFull transactionId={transactionId} />
+        <ReportFull 
+          transactionId={transactionId} 
+          // @ts-ignore - Vamos adicionar essa prop no ReportFull no próximo passo
+          onRestart={handleReset} 
+        />
       )}
     </div>
   );
