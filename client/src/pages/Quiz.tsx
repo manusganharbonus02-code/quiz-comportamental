@@ -1,186 +1,135 @@
 import React, { useState } from 'react';
 import { Button } from '../components/ui/Button';
 import { Card, CardContent } from '../components/ui/Card';
-import { ArrowLeft, ArrowRight, Loader2, AlertCircle } from 'lucide-react';
+import { ALL_QUESTIONS, ANSWER_OPTIONS } from '../constants';
 import { startCheckout } from '../services/apiService';
-import { Answers, QuizData } from '../types';
-import { getQuizQuestions } from '../services/questionBank';
+import { QuizData } from '../types';
+import { AlertTriangle, CheckCircle2 } from 'lucide-react';
 
-interface QuizPageProps {
-  onComplete: (data: { checkoutUrl: string, quizData: QuizData }) => void;
-  onCancel: () => void;
+interface QuizProps {
+  onComplete: (transactionId: string) => void;
 }
 
-const ANSWER_OPTIONS = [
-    { value: 1, label: "Discordo Totalmente" },
-    { value: 2, label: "Discordo" },
-    { value: 3, label: "Neutro" },
-    { value: 4, label: "Concordo" },
-    { value: 5, label: "Concordo Totalmente" },
-];
-
-const DIMENSION_NAMES: Record<string, string> = {
-  Foco: "Foco",
-  Adaptabilidade: "Adaptabilidade",
-  AgressorRotina: "Inovação",
-  MatadorDragoes: "Coragem",
-  RadarSocial: "Inteligência Social",
-}
-
-export default function QuizPage({ onComplete, onCancel }: QuizPageProps) {
-  const [quizQuestions] = useState(() => getQuizQuestions(25));
-  const [currentQuestion, setCurrentQuestion] = useState(0);
-  const [answers, setAnswers] = useState<Answers>({});
-  const [error, setError] = useState("");
+export const Quiz: React.FC<QuizProps> = ({ onComplete }) => {
+  const [currentIdx, setCurrentIdx] = useState(0);
+  const [answers, setAnswers] = useState<Record<number, number>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isFading, setIsFading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const question = quizQuestions[currentQuestion];
-  const progress = ((currentQuestion + 1) / quizQuestions.length) * 100;
-  const isAnswered = answers[question.id] !== undefined;
-  const isLastQuestion = currentQuestion === quizQuestions.length - 1;
+  const question = ALL_QUESTIONS[currentIdx];
+  const progress = ((currentIdx + 1) / ALL_QUESTIONS.length) * 100;
 
-  const transitionToQuestion = (newIndex: number) => {
-    setIsFading(true);
-    setTimeout(() => {
-        setCurrentQuestion(newIndex);
-        setIsFading(false);
-    }, 300); // Deve corresponder à duração da transição do CSS
-  };
+  const handleAnswer = async (value: number) => {
+    const newAnswers = { ...answers, [question.id]: value };
+    setAnswers(newAnswers);
+    setError(null);
 
-  const handleAnswer = (value: number) => {
-    setAnswers(prev => ({ ...prev, [question.id]: value }));
-    setError("");
-  };
-
-  const handleNext = () => {
-    if (!isAnswered) {
-      setError("Por favor, selecione uma resposta para continuar.");
-      return;
-    }
-    if (!isLastQuestion) {
-      transitionToQuestion(currentQuestion + 1);
+    if (currentIdx < ALL_QUESTIONS.length - 1) {
+      setTimeout(() => setCurrentIdx(prev => prev + 1), 200);
+    } else {
+      await submitQuiz(newAnswers);
     }
   };
 
-  const handlePrevious = () => {
-    if (currentQuestion > 0) {
-      transitionToQuestion(currentQuestion - 1);
-    }
-  };
-
-  const handleSubmit = async () => {
-    if (Object.keys(answers).length !== quizQuestions.length) {
-      setError("Parece que faltam respostas. Por favor, revise antes de finalizar.");
-      return;
-    }
-
+  const submitQuiz = async (finalAnswers: Record<number, number>) => {
+    if (isSubmitting) return;
     setIsSubmitting(true);
+    setError(null);
+    
     try {
-      const quizData: QuizData = { questions: quizQuestions, answers };
-      // Chama a nova função para iniciar o checkout
-      const { checkoutUrl } = await startCheckout(quizData);
-      // Passa a URL e os dados do quiz para o App.tsx
-      onComplete({ checkoutUrl, quizData });
+      const payload: QuizData = {
+        questions: ALL_QUESTIONS,
+        answers: finalAnswers
+      };
+
+      console.log("Enviando respostas...", payload);
+      const result = await startCheckout(payload);
+      onComplete(result.transactionId);
+
     } catch (err: any) {
-      setError(err.message || "Ocorreu um erro ao enviar suas respostas. Tente novamente.");
-    } finally {
+      console.error("Erro no envio:", err);
+      let msg = "Ocorreu um erro ao processar suas respostas.";
+      if (err.message && err.message.includes('502')) {
+        msg = "Servidor reiniciando. Tente novamente em 5 segundos.";
+      }
+      setError(msg);
       setIsSubmitting(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-slate-900 p-4 flex items-center justify-center animate-fade-in">
-      <div className="w-full max-w-2xl mx-auto">
-        <div className="mb-6 text-center">
-          <p className="text-gray-400 font-semibold">Pergunta {currentQuestion + 1} de {quizQuestions.length}</p>
-          <div className="mt-2 bg-slate-700 rounded-full h-2.5">
-            <div
-              className="bg-gradient-to-r from-amber-500 to-orange-500 h-2.5 rounded-full transition-all duration-300"
+    <div className="min-h-screen flex items-center justify-center p-4 bg-slate-900 font-sans">
+      <div className="w-full max-w-2xl">
+        <div className="mb-8">
+          <div className="flex justify-between text-xs font-bold text-slate-400 mb-2 uppercase tracking-wider">
+            <span>Pergunta {currentIdx + 1} / {ALL_QUESTIONS.length}</span>
+            <span>{Math.round(progress)}% Concluído</span>
+          </div>
+          <div className="h-2 bg-slate-800 rounded-full overflow-hidden shadow-inner">
+            <div 
+              className="h-full bg-gradient-to-r from-amber-500 to-orange-600 transition-all duration-500 ease-out shadow-[0_0_10px_rgba(245,158,11,0.5)]"
               style={{ width: `${progress}%` }}
             />
           </div>
         </div>
 
-        <div className={`transition-opacity duration-300 ${isFading ? 'opacity-0' : 'opacity-100'}`}>
-            <Card>
-            <CardContent className="p-6 sm:p-10">
-                <div className="mb-8 min-h-[120px] flex flex-col justify-center">
-                <span className="inline-block bg-teal-900/50 text-teal-300 px-3 py-1 rounded-full text-sm font-semibold mb-4 self-center">
-                    {DIMENSION_NAMES[question.dimension] || question.dimension}
-                </span>
-                <h2 className="text-xl sm:text-2xl font-bold text-gray-100 text-center">{question.text}</h2>
-                </div>
+        <Card className="animate-fade-in border-slate-700 bg-slate-800/50 shadow-2xl">
+          <CardContent className="p-6 sm:p-8">
+            <div className="mb-8 min-h-[120px] flex flex-col items-center justify-center text-center">
+              <span className="text-amber-500 text-xs font-bold uppercase tracking-widest mb-3 bg-amber-500/10 px-3 py-1 rounded-full">
+                Avaliação Comportamental
+              </span>
+              <h2 className="text-xl md:text-2xl font-semibold text-white leading-snug">
+                "{question.text}"
+              </h2>
+            </div>
 
-                <div className="space-y-3">
-                {ANSWER_OPTIONS.map(option => (
-                    <button
+            <div className="space-y-3">
+              {ANSWER_OPTIONS.map((option) => {
+                const isSelected = answers[question.id] === option.value;
+                return (
+                  <button
                     key={option.value}
-                    onClick={() => handleAnswer(option.value)}
-                    className={`w-full p-4 text-left rounded-lg border-2 transition-all duration-200 text-gray-200 font-medium ${
-                        answers[question.id] === option.value
-                        ? "border-amber-500 bg-amber-900/20 ring-2 ring-amber-500/30"
-                        : "border-slate-600 hover:border-amber-500/50 bg-slate-700/50"
-                    }`}
-                    >
-                    {option.label}
-                    </button>
-                ))}
+                    onClick={() => !isSubmitting && handleAnswer(option.value)}
+                    disabled={isSubmitting}
+                    className={`
+                      w-full p-4 text-left rounded-xl border-2 transition-all duration-200 group relative overflow-hidden
+                      ${isSelected 
+                        ? 'border-amber-500 bg-amber-500/10 text-white shadow-[0_0_15px_rgba(245,158,11,0.2)]' 
+                        : 'border-slate-700 bg-slate-800 text-slate-400 hover:border-slate-500 hover:text-slate-200 hover:bg-slate-700'}
+                      ${isSubmitting ? 'opacity-50 cursor-not-allowed' : ''}
+                    `}
+                  >
+                    <span className="relative z-10 font-medium flex justify-between items-center">
+                      {option.label}
+                      {isSelected && <CheckCircle2 className="w-5 h-5 text-amber-500" />}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+
+            {error && (
+              <div className="mt-6 p-4 bg-red-900/20 border border-red-800 rounded-xl flex items-start gap-3 animate-pulse">
+                <AlertTriangle className="text-red-500 flex-shrink-0 mt-0.5" />
+                <div className="flex-1">
+                  <p className="text-red-400 text-sm font-medium">{error}</p>
+                  <Button variant="danger" size="sm" className="mt-3 w-full" onClick={() => submitQuiz(answers)}>Tentar Novamente</Button>
                 </div>
-                
-                {error && (
-                <div className="mt-6 p-3 bg-red-900/50 border border-red-500/30 rounded-lg flex items-center gap-3">
-                    <AlertCircle className="w-5 h-5 text-red-400 flex-shrink-0" />
-                    <p className="text-red-300 text-sm font-medium">{error}</p>
-                </div>
-                )}
-            </CardContent>
-            </Card>
-        </div>
-
-        <div className="grid grid-cols-3 gap-4 items-center mt-8">
-            <Button
-                onClick={handlePrevious}
-                disabled={currentQuestion === 0}
-                variant="outline"
-                className="flex items-center justify-center gap-2"
-            >
-                <ArrowLeft className="w-4 h-4" />
-                Anterior
-            </Button>
-
-            <Button
-                onClick={onCancel}
-                variant="ghost"
-                className="text-slate-400 hover:text-red-400"
-            >
-                Cancelar
-            </Button>
-
-            {isLastQuestion ? (
-                <Button
-                    onClick={handleSubmit}
-                    disabled={isSubmitting || !isAnswered}
-                    className="bg-green-600 hover:bg-green-500 text-white shadow-lg shadow-green-500/20"
-                >
-                    {isSubmitting ? (
-                        <Loader2 className="w-5 h-5 animate-spin" />
-                    ) : (
-                        "Finalizar e Ver Prévia"
-                    )}
-                </Button>
-            ) : (
-                <Button
-                    onClick={handleNext}
-                    disabled={!isAnswered}
-                    className="flex items-center justify-center gap-2"
-                >
-                    Próxima
-                    <ArrowRight className="w-4 h-4" />
-                </Button>
+              </div>
             )}
-        </div>
+
+            {isSubmitting && !error && (
+              <div className="mt-8 text-center space-y-3">
+                <div className="flex justify-center">
+                  <div className="w-8 h-8 border-4 border-amber-500 border-t-transparent rounded-full animate-spin"></div>
+                </div>
+                <p className="text-amber-500 font-medium animate-pulse">Analisando micro-expressões comportamentais...</p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
       </div>
     </div>
   );
-}
+};
