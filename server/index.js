@@ -21,45 +21,32 @@ const ai = apiKey ? new GoogleGenAI({ apiKey }) : null;
 app.use(cors());
 app.use(express.json());
 
-// --- LOCALIZAR O FRONTEND (BLINDAGEM) ---
-// O Render pode rodar o script de lugares diferentes. Vamos procurar a pasta 'dist' em vários níveis.
+// --- LOCALIZAR O FRONTEND ---
 const searchPaths = [
-  path.join(__dirname, '../client/dist'),        // Estrutura padrão local
-  path.join(__dirname, '../../client/dist'),     // Estrutura possível no container
-  path.join(process.cwd(), 'client/dist'),       // Baseado no comando de execução
-  path.join(process.cwd(), 'dist'),              // Baseado na raiz
-  path.resolve('/opt/render/project/src/client/dist') // Caminho absoluto padrão do Render
+  path.join(__dirname, '../client/dist'),
+  path.join(__dirname, '../../client/dist'),
+  path.join(process.cwd(), 'client/dist'),
+  path.join(process.cwd(), 'dist'),
+  path.resolve('/opt/render/project/src/client/dist')
 ];
 
 let clientDistPath = null;
 
-console.log("--- DIAGNÓSTICO DE INICIALIZAÇÃO ---");
-console.log("Diretório atual (__dirname):", __dirname);
-console.log("Diretório de execução (cwd):", process.cwd());
-
 for (const p of searchPaths) {
-  console.log(`Procurando frontend em: ${p}`);
   if (fs.existsSync(p) && fs.existsSync(path.join(p, 'index.html'))) {
     clientDistPath = p;
-    console.log(`✅ SUCESSO: Frontend encontrado em: ${p}`);
     break;
   }
 }
 
 if (clientDistPath) {
-  // Serve os arquivos estáticos (JS, CSS, Imagens)
   app.use(express.static(clientDistPath));
-} else {
-  console.error("❌ ERRO CRÍTICO: Pasta 'dist' não encontrada em nenhum lugar!");
 }
-
-// --- ROTAS DA API (MANTIDAS) ---
-// (Seus códigos de API continuam funcionando aqui)
 
 // BANCO DE DADOS EM MEMÓRIA
 const transactions = new Map();
 
-// LÓGICA AUXILIAR
+// LÓGICA AUXILIAR DE SCORE
 const calculateScores = (answers, questions) => {
   const scores = { Foco: 0, Adaptabilidade: 0, Inovacao: 0, Coragem: 0, InteligenciaSocial: 0 };
   const counts = { ...scores };
@@ -72,6 +59,8 @@ const calculateScores = (answers, questions) => {
   return scores;
 };
 
+// --- ROTAS DA API ---
+
 app.post('/api/quiz/submit', (req, res) => {
   try {
     const { answers, questions } = req.body;
@@ -83,6 +72,7 @@ app.post('/api/quiz/submit', (req, res) => {
   } catch (e) { console.error(e); res.status(500).json({message: 'Erro interno'}); }
 });
 
+// --- CORREÇÃO AQUI: Prompt Blindado para a Prévia ---
 app.post('/api/report/preview', async (req, res) => {
   try {
     const { transactionId } = req.body;
@@ -91,10 +81,46 @@ app.post('/api/report/preview', async (req, res) => {
     
     if (!ai) return res.json({ previewText: "Seu perfil indica um potencial executivo alto, mas há uma trava emocional custando oportunidades." });
 
-    const prompt = `Analise este perfil (0-100): ${JSON.stringify(t.scores)}. Escreva um gancho curto e misterioso de 30 palavras para venda.`;
-    const response = await ai.models.generateContent({ model: 'gemini-2.5-flash', contents: prompt });
-    res.json({ previewText: response.text.trim() });
-  } catch (e) { console.error(e); res.status(500).json({message: 'Erro IA'}); }
+    // PROMPT MUITO MAIS RÍGIDO PARA EVITAR TEXTÃO
+    const prompt = `
+      ATUE COMO: Copywriter especialista em persuasão e vendas.
+      DADOS DO USUÁRIO (0-100): ${JSON.stringify(t.scores)}
+      
+      SUA MISSÃO: Escrever APENAS UM parágrafo curto (máximo 35 palavras) para a tela de pré-venda.
+      
+      REGRAS OBRIGATÓRIAS:
+      1. NÃO use Markdown, NÃO use negrito (**), NÃO use títulos (##). Apenas texto puro.
+      2. NÃO mostre as notas numéricas.
+      3. NÃO faça uma análise técnica.
+      4. O texto deve ter um tom de MISTÉRIO e ALERTA.
+      5. Estrutura: Elogie o ponto forte -> Diga que existe um "Ponto Cego" perigoso -> Convide para ver a solução.
+      
+      Exemplo de resposta perfeita:
+      "Sua capacidade de Foco é impressionante e rara. Porém, detectamos um padrão de comportamento rígido que está limitando seu crescimento financeiro. O relatório completo revela exatamente qual hábito você precisa eliminar hoje."
+    `;
+
+    const response = await ai.models.generateContent({ 
+      model: 'gemini-2.5-flash', 
+      contents: prompt,
+      config: { 
+        temperature: 0.6, // Temperatura menor para ser mais obediente
+        maxOutputTokens: 100 // Corta se tentar escrever muito
+      } 
+    });
+    
+    // Limpeza extra caso a IA desobedeça e mande aspas ou quebras de linha
+    let cleanText = response.text.trim().replace(/[*#]/g, ''); // Remove * e #
+    if (cleanText.startsWith('"') && cleanText.endsWith('"')) {
+      cleanText = cleanText.slice(1, -1);
+    }
+
+    res.json({ previewText: cleanText });
+
+  } catch (e) { 
+    console.error(e); 
+    // Fallback em caso de erro na IA
+    res.json({ previewText: "Identificamos um perfil de alta performance, mas um ponto cego específico está drenando sua energia e resultados. Desbloqueie para entender como corrigir isso." });
+  }
 });
 
 app.get('/api/report/full/:transactionId', async (req, res) => {
@@ -130,17 +156,11 @@ app.get('/api/simulate-pay/:id', (req, res) => {
   else res.status(404).send('404');
 });
 
-// --- ROTA "PEGA TUDO" (ESSENCIAL PARA O SITE ABRIR) ---
 app.get('*', (req, res) => {
   if (clientDistPath) {
     res.sendFile(path.join(clientDistPath, 'index.html'));
   } else {
-    // Se não achou a pasta, mostra um erro descritivo na tela em vez de "Cannot GET /"
-    res.status(500).send(`
-      <h1>Erro de Configuração no Servidor</h1>
-      <p>O servidor iniciou, mas não encontrou os arquivos do site (Frontend).</p>
-      <p>Verifique os logs do Render para ver onde ele procurou.</p>
-    `);
+    res.status(500).send("Erro Config: Frontend não encontrado.");
   }
 });
 
