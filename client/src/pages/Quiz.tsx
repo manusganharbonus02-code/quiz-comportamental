@@ -1,13 +1,14 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { Button } from '../components/ui/Button';
 import { Card, CardContent } from '../components/ui/Card';
 import { ArrowLeft, ArrowRight, Loader2, AlertCircle } from 'lucide-react';
-import { submitQuizAnswers } from '../services/apiService';
-import { Answers, QuizCompletionData } from '../types';
-import { getRandomQuestions } from '../services/questionBank';
+import { startCheckout } from '../services/apiService';
+import { Answers, QuizData } from '../types';
+import { getQuizQuestions } from '../services/questionBank';
 
 interface QuizPageProps {
-  onComplete: (data: QuizCompletionData) => void;
+  // CORREÇÃO: A função onComplete agora recebe o objeto com a URL de checkout
+  onComplete: (data: { checkoutUrl: string, quizData: QuizData }) => void;
   onCancel: () => void;
 }
 
@@ -19,7 +20,7 @@ const ANSWER_OPTIONS = [
     { value: 5, label: "Concordo Totalmente" },
 ];
 
-// Mapeamento para exibir nomes bonitos na tela
+// Mapeamento para exibir nomes bonitos na tela, correspondendo às 5 dimensões
 const DIMENSION_NAMES: Record<string, string> = {
   Foco: "Foco",
   Adaptabilidade: "Adaptabilidade",
@@ -29,7 +30,7 @@ const DIMENSION_NAMES: Record<string, string> = {
 };
 
 export default function QuizPage({ onComplete, onCancel }: QuizPageProps) {
-  const [quizQuestions] = useState(() => getRandomQuestions(25));
+  const [quizQuestions] = useState(() => getQuizQuestions(25));
   const [currentQuestion, setCurrentQuestion] = useState(0);
   const [answers, setAnswers] = useState<Answers>({});
   const [error, setError] = useState("");
@@ -78,11 +79,16 @@ export default function QuizPage({ onComplete, onCancel }: QuizPageProps) {
 
     setIsSubmitting(true);
     try {
-      // CORREÇÃO: Envia respostas E perguntas para o backend
-      const { transactionId } = await submitQuizAnswers(answers, quizQuestions);
-      onComplete({ transactionId, answers, questions: quizQuestions });
-    } catch (err) {
-      setError("Ocorreu um erro ao enviar suas respostas. Tente novamente.");
+      // CORREÇÃO: Prepara o pacote completo de dados (perguntas + respostas)
+      const quizData: QuizData = { answers, questions: quizQuestions };
+      
+      // CORREÇÃO: Chama a nova função de checkout
+      const { checkoutUrl } = await startCheckout(quizData);
+      
+      // CORREÇÃO: Passa os dados corretos para o App.tsx fazer o redirecionamento
+      onComplete({ checkoutUrl, quizData });
+    } catch (err: any) {
+      setError(err.message || "Ocorreu um erro ao enviar suas respostas. Tente novamente.");
       console.error(err);
     } finally {
       setIsSubmitting(false);
@@ -107,7 +113,7 @@ export default function QuizPage({ onComplete, onCancel }: QuizPageProps) {
             <CardContent className="p-6 sm:p-10">
                 <div className="mb-8 min-h-[120px] flex flex-col justify-center">
                 <span className="inline-block bg-teal-900/50 text-teal-300 px-3 py-1 rounded-full text-sm font-semibold mb-4 self-center">
-                    {DIMENSION_NAMES[question.module]}
+                    {DIMENSION_NAMES[question.dimension] || question.dimension}
                 </span>
                 <h2 className="text-xl sm:text-2xl font-bold text-gray-100 text-center">{question.text}</h2>
                 </div>
