@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { fetchFullReport, FullReportData } from '../services/apiService';
 import { Card, CardContent } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
-import { CheckCircle, Target, TrendingUp, Lock, Download, LogOut, Share2, Brain, Zap } from 'lucide-react';
+import { CheckCircle, Target, TrendingUp, Lock, Download, LogOut, Share2, Brain, Zap, AlertTriangle } from 'lucide-react';
 import { Radar } from 'react-chartjs-2';
 import {
   Chart as ChartJS,
@@ -63,8 +63,8 @@ export const ReportFull: React.FC<ReportFullProps> = ({ transactionId, onRestart
     return (
       <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center text-white p-4 text-center font-sans">
         <div className="w-16 h-16 border-4 border-amber-500 border-t-transparent rounded-full animate-spin mb-6"></div>
-        <h2 className="text-2xl font-bold mb-2">Gerando Dossiê Completo...</h2>
-        <p className="text-slate-400 max-w-md">A IA está compilando seus dados brutos, cruzando padrões e gerando seu plano de ação exclusivo.</p>
+        <h2 className="text-2xl font-bold mb-2">Processando Análise Profunda...</h2>
+        <p className="text-slate-400 max-w-md">A IA está correlacionando suas respostas com 5 pilares de performance para gerar seu dossiê exclusivo.</p>
       </div>
     );
   }
@@ -74,8 +74,11 @@ export const ReportFull: React.FC<ReportFullProps> = ({ transactionId, onRestart
       <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center text-white p-4 font-sans">
         <Lock className="w-16 h-16 text-red-500 mb-4" />
         <h2 className="text-2xl font-bold mb-4">Acesso Pendente</h2>
-        <p className="text-slate-400 mb-6 text-center">Aguardando confirmação do pagamento...</p>
-        <Button onClick={() => window.location.reload()}>Verificar Novamente</Button>
+        <p className="text-slate-400 mb-6 text-center">Aguardando confirmação...</p>
+        <div className="flex gap-4">
+          <Button onClick={() => window.location.reload()}>Verificar</Button>
+          {onRestart && <Button variant="ghost" onClick={onRestart}>Sair</Button>}
+        </div>
       </div>
     );
   }
@@ -95,8 +98,8 @@ export const ReportFull: React.FC<ReportFullProps> = ({ transactionId, onRestart
         pointBorderColor: '#f59e11',
       },
       {
-        label: 'Alta Performance',
-        data: [85, 85, 85, 85, 85],
+        label: 'Benchmark Global',
+        data: [80, 80, 80, 80, 80],
         backgroundColor: 'rgba(148, 163, 184, 0.05)',
         borderColor: 'rgba(148, 163, 184, 0.2)',
         borderWidth: 1,
@@ -133,136 +136,94 @@ export const ReportFull: React.FC<ReportFullProps> = ({ transactionId, onRestart
           <div className="flex items-center gap-2">
             <Button size="sm" variant="outline" onClick={handleShare}>{copied ? 'Link Copiado' : 'Salvar Link'}</Button>
             <Button size="sm" onClick={() => window.print()}><Download className="w-4 h-4 mr-2" /> PDF</Button>
-            {onRestart && <Button size="sm" variant="ghost" onClick={onRestart}><LogOut className="w-4 h-4" /></Button>}
+            {onRestart && <Button size="sm" variant="ghost" onClick={onRestart} title="Nova Análise"><LogOut className="w-4 h-4" /></Button>}
           </div>
         </div>
       </header>
 
       <main className="max-w-6xl mx-auto px-4 sm:px-6 py-10 space-y-16">
         
-        {/* 1. ARQUÉTIPO */}
+        {/* 1. IDENTIDADE (ARQUÉTIPO) */}
         <section className="text-center space-y-8 break-inside-avoid">
           <div>
-            <span className="text-amber-500 text-sm font-bold tracking-widest uppercase mb-2 block">Identidade Comportamental</span>
-            <h1 className="text-4xl md:text-6xl font-extrabold text-white tracking-tight leading-tight mb-6">
+            <span className="text-amber-500 text-xs font-bold tracking-[0.2em] uppercase mb-3 block">Diagnóstico Final</span>
+            <h1 className="text-3xl md:text-5xl font-extrabold text-white tracking-tight leading-tight mb-4">
               {report.archetype}
             </h1>
+            <div className="w-24 h-1 bg-amber-500 mx-auto rounded-full"></div>
           </div>
           
-          <div className="bg-gradient-to-b from-slate-900 to-slate-950 border border-slate-800 p-8 rounded-2xl shadow-2xl text-left">
-            <div className="prose prose-invert max-w-none">
-               <p className="text-lg md:text-xl text-slate-300 leading-relaxed whitespace-pre-line">
-                 {report.summary}
-               </p>
-            </div>
+          <div className="bg-slate-900/50 border-l-4 border-amber-500 p-6 md:p-10 text-left rounded-r-xl">
+             <p className="text-lg md:text-xl text-slate-300 leading-relaxed whitespace-pre-line font-light">
+               {report.summary}
+             </p>
           </div>
         </section>
 
-        {/* 2. VISUALIZAÇÃO TÉCNICA */}
-        <section className="grid lg:grid-cols-2 gap-12 items-center break-inside-avoid">
-          <div className="h-[450px] w-full bg-slate-900/50 rounded-2xl border border-slate-800 p-4 flex items-center justify-center relative">
-             <div className="absolute top-4 right-4 text-xs text-slate-500">Comparativo vs. Mercado</div>
-             <div className="w-full h-full">
+        {/* 2. RAIO-X TÉCNICO */}
+        <section className="grid lg:grid-cols-2 gap-12 items-start break-inside-avoid">
+          <div className="bg-slate-900 rounded-2xl border border-slate-800 p-4 flex flex-col items-center shadow-2xl">
+             <h3 className="text-white font-bold mb-4 flex items-center gap-2"><TrendingUp className="text-amber-500 w-5 h-5"/> Mapa de Competências</h3>
+             <div className="w-full aspect-square max-w-[400px] relative">
                 <Radar data={chartData} options={chartOptions} />
              </div>
           </div>
           
-          <div className="space-y-8">
-            <div>
-               <h3 className="text-2xl font-bold text-white mb-2 flex items-center gap-2">
-                 <TrendingUp className="text-amber-500 w-6 h-6" /> Mapeamento de Competências
-               </h3>
-               <p className="text-slate-400">Análise quantitativa dos seus 5 pilares fundamentais de performance.</p>
-            </div>
-             
-             <div className="space-y-5">
-               {report.dimensions.map((dim) => (
-                 <div key={dim.name}>
-                   <div className="flex justify-between items-end mb-2">
-                     <span className="font-bold text-slate-200">{dim.name}</span>
-                     <span className={`text-sm font-mono px-2 py-0.5 rounded ${dim.score > 75 ? 'bg-green-900/30 text-green-400' : dim.score < 50 ? 'bg-red-900/30 text-red-400' : 'bg-amber-900/30 text-amber-400'}`}>
-                       {dim.score}/100
-                     </span>
-                   </div>
-                   <div className="w-full bg-slate-800 h-2 rounded-full overflow-hidden">
-                     <div 
-                        className={`h-full rounded-full ${dim.score > 75 ? 'bg-green-500' : dim.score < 50 ? 'bg-red-500' : 'bg-amber-500'}`} 
-                        style={{width: `${dim.score}%`}}
-                     ></div>
-                   </div>
+          <div className="space-y-6">
+             {report.dimensions.map((dim) => (
+               <div key={dim.name} className="bg-slate-900/30 rounded-xl p-5 border border-slate-800/50 hover:border-amber-500/20 transition-colors">
+                 <div className="flex justify-between items-center mb-3">
+                   <h4 className="font-bold text-white text-lg">{dim.name}</h4>
+                   <span className={`text-sm font-mono px-2 py-1 rounded font-bold ${dim.score > 75 ? 'bg-green-500/10 text-green-400' : dim.score < 50 ? 'bg-red-500/10 text-red-400' : 'bg-amber-500/10 text-amber-400'}`}>
+                     {dim.score}/100
+                   </span>
                  </div>
-               ))}
-             </div>
+                 <p className="text-slate-400 text-sm leading-relaxed border-t border-slate-800 pt-3">
+                   {dim.analysis}
+                 </p>
+               </div>
+             ))}
           </div>
         </section>
 
-        {/* 3. PONTO CEGO (VERDADE BRUTAL) */}
+        {/* 3. A VERDADE BRUTAL (PONTO CEGO) */}
         <section className="break-inside-avoid">
-          <div className="bg-gradient-to-r from-red-950/30 to-slate-900 border border-red-900/50 rounded-2xl p-8 md:p-10 flex flex-col md:flex-row gap-8 items-start shadow-lg shadow-red-900/10">
-             <div className="bg-red-500/10 p-5 rounded-full shrink-0 border border-red-500/20">
-               <Brain className="text-red-500 w-10 h-10" />
+          <div className="bg-gradient-to-r from-red-950/40 to-slate-900 border border-red-900/30 rounded-2xl p-8 flex flex-col md:flex-row gap-6 items-center shadow-[0_0_30px_rgba(127,29,29,0.1)]">
+             <div className="bg-red-500/10 p-4 rounded-full shrink-0">
+               <AlertTriangle className="text-red-500 w-10 h-10" />
              </div>
-             <div>
-               <h3 className="text-2xl font-bold text-white mb-4">Ponto Cego Crítico Detectado</h3>
-               <p className="text-red-100/80 leading-relaxed text-lg border-l-4 border-red-500/50 pl-6 italic">
+             <div className="text-center md:text-left">
+               <h3 className="text-xl font-bold text-white mb-2 uppercase tracking-wider">Alerta de Ponto Cego</h3>
+               <p className="text-red-100/90 text-lg font-medium italic">
                  "{report.blindSpot}"
                </p>
              </div>
           </div>
         </section>
 
-        {/* 4. ANÁLISE PROFUNDA (CARDS EXTENDIDOS) */}
-        <section className="space-y-8">
-          <div className="flex items-center gap-4">
-            <div className="h-px flex-1 bg-slate-800"></div>
-            <h3 className="text-xl font-bold text-slate-400 uppercase tracking-wider">Detalhamento Técnico</h3>
-            <div className="h-px flex-1 bg-slate-800"></div>
-          </div>
-          
-          <div className="grid gap-6">
-            {report.dimensions.map((dim) => (
-              <Card key={dim.name} className="bg-slate-800/20 hover:bg-slate-800/40 transition-colors border-slate-700/50">
-                <CardContent className="p-8">
-                  <div className="flex flex-col md:flex-row md:items-center gap-4 mb-4">
-                    <h4 className="text-amber-500 font-bold text-lg uppercase tracking-wider min-w-[150px]">{dim.name}</h4>
-                    <div className="h-px flex-1 bg-slate-700 hidden md:block"></div>
-                    <span className="text-slate-500 text-xs uppercase font-bold">Impacto na Carreira</span>
-                  </div>
-                  <p className="text-slate-300 text-base leading-relaxed">
-                    {dim.analysis}
-                  </p>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        </section>
-
-        {/* 5. PLANO DE AÇÃO ESTRATÉGICO */}
+        {/* 4. PROTOCOLO DE AÇÃO */}
         <section className="bg-slate-900 rounded-3xl p-8 md:p-12 border border-slate-800 relative overflow-hidden break-inside-avoid">
-          <div className="absolute top-0 right-0 w-96 h-96 bg-amber-500/5 rounded-full blur-3xl -mr-20 -mt-20 pointer-events-none"></div>
+          <div className="absolute top-0 right-0 w-64 h-64 bg-amber-500/5 rounded-full blur-3xl pointer-events-none"></div>
           
-          <h3 className="text-3xl font-bold text-white mb-12 text-center relative z-10 flex justify-center items-center gap-3">
-            <Zap className="text-amber-500 w-8 h-8" /> Protocolo de Evolução
+          <h3 className="text-2xl md:text-3xl font-bold text-white mb-10 text-center relative z-10 flex justify-center items-center gap-3">
+            <Zap className="text-amber-500 w-8 h-8" /> Plano de Ação Imediato
           </h3>
           
           <div className="grid md:grid-cols-2 gap-6 relative z-10">
             {report.actionPlan.map((action, idx) => (
-              <div key={idx} className="bg-slate-950/50 p-6 rounded-xl border border-slate-800 flex gap-5 hover:border-amber-500/30 transition-colors">
-                <div className="flex-shrink-0 w-10 h-10 rounded-lg bg-gradient-to-br from-amber-500 to-orange-600 text-white font-bold text-xl flex items-center justify-center shadow-lg">
-                  {idx + 1}
-                </div>
-                <div>
-                    <h5 className="text-white font-bold mb-2 text-sm uppercase tracking-wide text-slate-500">Passo {idx + 1}</h5>
-                    <p className="text-slate-200 text-lg leading-relaxed">{action}</p>
-                </div>
+              <div key={idx} className="bg-slate-950 p-6 rounded-xl border-l-4 border-amber-600 shadow-lg flex gap-4">
+                <span className="text-4xl font-bold text-slate-800">{idx + 1}</span>
+                <p className="text-slate-200 text-lg leading-relaxed self-center">{action}</p>
               </div>
             ))}
           </div>
         </section>
         
         <div className="text-center pb-10 pt-10 border-t border-slate-800/50">
-            <p className="text-slate-600 text-sm">Relatório de Inteligência Comportamental &copy; {new Date().getFullYear()}</p>
-            <p className="text-slate-700 text-xs mt-1 font-mono">ID: {transactionId}</p>
+           <Button variant="ghost" onClick={onRestart} className="text-slate-500 hover:text-white">
+             Fazer Nova Análise
+           </Button>
+           <p className="text-slate-700 text-xs mt-4 font-mono">ID: {transactionId} • Gerado em {new Date().toLocaleDateString()}</p>
         </div>
 
       </main>
