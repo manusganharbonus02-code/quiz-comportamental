@@ -21,7 +21,7 @@ const ai = apiKey ? new GoogleGenAI({ apiKey }) : null;
 app.use(cors());
 app.use(express.json());
 
-// --- LOCALIZAR O FRONTEND (BLINDAGEM) ---
+// --- LOCALIZAR O FRONTEND ---
 const searchPaths = [
   path.join(__dirname, '../client/dist'),
   path.join(__dirname, '../../client/dist'),
@@ -46,13 +46,14 @@ if (clientDistPath) {
 // BANCO DE DADOS EM MEMÓRIA
 const transactions = new Map();
 
-// LÓGICA AUXILIAR DE SCORE
+// --- LÓGICA DE ANÁLISE QUALITATIVA ---
+// Agora capturamos OS DETALHES das respostas, não só os números.
 const calculateScores = (answers, questions) => {
   const scores = { Foco: 0, Adaptabilidade: 0, Inovacao: 0, Coragem: 0, InteligenciaSocial: 0 };
   const counts = { ...scores };
   
-  // Para análise qualitativa no prompt
-  let qualitativeSummary = [];
+  // Lista de comportamentos extremos para a IA usar na persuasão
+  let extremeBehaviors = [];
 
   questions.forEach(q => {
     const val = answers[q.id] || 0;
@@ -61,15 +62,19 @@ const calculateScores = (answers, questions) => {
     if (scores[key] !== undefined) { 
       scores[key] += val; 
       counts[key] += 1; 
-      // Guarda respostas extremas (1 ou 5) para a IA personalizar
-      if (val === 1 || val === 5) {
-        qualitativeSummary.push(`Item "${q.text}" -> Resposta: ${val}/5`);
+      
+      // Se o usuário foi extremo (1 ou 5), guardamos isso para "jogar na cara" dele depois
+      if (val === 1) {
+        extremeBehaviors.push(`O usuário admite que NÃO consegue: "${q.text}"`);
+      } else if (val === 5) {
+        extremeBehaviors.push(`O usuário afirma com certeza que: "${q.text}"`);
       }
     }
   });
 
   Object.keys(scores).forEach(k => { if (counts[k] > 0) scores[k] = Math.round((scores[k] / (counts[k] * 5)) * 100); });
-  return { scores, qualitativeSummary };
+  
+  return { scores, extremeBehaviors };
 };
 
 // --- ROTAS DA API ---
@@ -79,13 +84,15 @@ app.post('/api/quiz/submit', (req, res) => {
     const { answers, questions } = req.body;
     if(!answers) return res.status(400).json({message: 'Dados inválidos'});
     const transactionId = uuidv4();
-    const { scores, qualitativeSummary } = calculateScores(answers, questions);
+    
+    // Calcula scores E comportamentos
+    const { scores, extremeBehaviors } = calculateScores(answers, questions);
     
     transactions.set(transactionId, { 
       answers, 
       questions, 
       scores, 
-      qualitativeSummary,
+      extremeBehaviors, // Salvamos isso para usar no prompt
       status: 'PENDING', 
       createdAt: new Date() 
     });
@@ -93,99 +100,106 @@ app.post('/api/quiz/submit', (req, res) => {
   } catch (e) { console.error(e); res.status(500).json({message: 'Erro interno'}); }
 });
 
-// --- PRÉVIA PERSUASIVA (HOOK HIPER-PERSONALIZADO) ---
+// --- PRÉVIA: GANCHO HIPER-PERSONALIZADO ---
 app.post('/api/report/preview', async (req, res) => {
   try {
     const { transactionId } = req.body;
     const t = transactions.get(transactionId);
     if (!t) return res.status(404).json({ message: "Sessão não encontrada" });
     
-    if (!ai) return res.json({ previewText: "Seu perfil revela um potencial executivo raro, mas detectamos um padrão de autossabotagem invisível ligado à sua adaptabilidade que pode estar custando oportunidades." });
+    if (!ai) return res.json({ previewText: "Seu perfil indica um potencial executivo alto, mas há uma trava emocional custando oportunidades." });
 
+    // PROMPT ATUALIZADO: Usa as respostas específicas
     const prompt = `
-      ATUE COMO: Especialista em Profiling Comportamental e Copywriting de Elite.
+      ATUE COMO: Especialista em Leitura Fria (Cold Reading) e Persuasão.
       
       DADOS DO USUÁRIO:
-      - Scores (0-100): ${JSON.stringify(t.scores)}
-      - Comportamentos Extremos (As respostas mais fortes dele): 
-      ${t.qualitativeSummary.slice(0, 5).join('\n')}
+      - Scores Gerais: ${JSON.stringify(t.scores)}
+      - CONFISSÕES DO USUÁRIO (Use isso para ser específico):
+      ${t.extremeBehaviors.slice(0, 5).join('\n')}
       
-      MISSÃO: Escrever APENAS UM parágrafo de ALTO IMPACTO (máx 40 palavras) para vender o relatório completo.
+      SUA MISSÃO: Escrever um gancho de venda de 40 palavras.
       
-      REGRAS DE OURO:
-      1. Use os "Comportamentos Extremos" para provar que você leu a mente dele. Seja específico!
-      2. Crie uma TENSÃO imediata: Mostre que a maior força dele está gerando um efeito colateral perigoso (O Ponto Cego).
-      3. NÃO use markdown, asteriscos ou formatação. Apenas texto corrido.
-      4. Termine com um convite irrecusável.
+      ESTRATÉGIA:
+      1. Pegue uma "Confissão" dele e valide (ex: "Você disse que odeia rotina...").
+      2. Conecte isso a um problema invisível (ex: "...isso explica sua instabilidade financeira").
+      3. Crie mistério.
+      4. NÃO USE MARKDOWN. Texto puro.
       
-      Exemplo do Tom: "Você disse que define prioridades claras, mas sua baixa pontuação em inovação sugere que você está apenas otimizando o passado, não criando o futuro. Descubra o que você está deixando na mesa agora."
+      Tom de voz: Dominante, Misterioso, Revelador.
     `;
 
     const response = await ai.models.generateContent({ 
       model: 'gemini-2.5-flash', 
       contents: prompt,
-      config: { 
-        temperature: 0.8, 
-        maxOutputTokens: 150 
-      } 
+      config: { temperature: 0.7, maxOutputTokens: 150 } 
     });
     
     let cleanText = response.text.trim().replace(/[*#]/g, '');
-    if (cleanText.startsWith('"') && cleanText.endsWith('"')) {
-      cleanText = cleanText.slice(1, -1);
-    }
+    if (cleanText.startsWith('"') && cleanText.endsWith('"')) cleanText = cleanText.slice(1, -1);
 
     res.json({ previewText: cleanText });
 
   } catch (e) { console.error(e); res.status(500).json({message: 'Erro IA'}); }
 });
 
-// --- RELATÓRIO COMPLETO (A ENTREGA MASSIVA) ---
+// --- RELATÓRIO FINAL: O DOSSIÊ COMPLETO ---
 app.get('/api/report/full/:transactionId', async (req, res) => {
   try {
     const { transactionId } = req.params;
     const t = transactions.get(transactionId);
     if (!t) return res.status(404).json({ message: "Não encontrado" });
 
-    // if (t.status !== 'PAID') return res.status(403).json({ message: 'PAYMENT_REQUIRED' });
-
     if (t.fullReport) return res.json(t.fullReport);
 
-    // Mock para testes sem IA
-    if (!ai) return res.json({ 
-        archetype: "Estrategista Bloqueado", 
-        summary: "Texto mock...", 
-        dimensions: [], 
-        blindSpot: "Mock", 
-        actionPlan: [] 
-    });
+    if (!ai) return res.json({ archetype: "Mock", summary: "Mock", dimensions: [], blindSpot: "Mock", actionPlan: [] });
 
+    // PROMPT MASSIVO PARA RELATÓRIO DETALHADO
     const prompt = `
-      ATUE COMO: O Maior Consultor de Carreira e Psicologia Executiva do Mundo.
-      CONTEXTO: O usuário pagou por uma análise profunda e transformadora. Ele quer a "Verdade Nua e Crua".
+      ATUE COMO: O Maior Mentor de Carreira e Psicólogo Comportamental do Mundo.
+      CLIENTE: Alguém buscando a verdade brutal para evoluir.
       
-      PERFIL DO USUÁRIO:
+      DADOS TÉCNICOS:
       - Scores: ${JSON.stringify(t.scores)}
-      - Respostas Chave: ${JSON.stringify(t.qualitativeSummary)}
+      - Comportamentos Específicos: ${JSON.stringify(t.extremeBehaviors)}
 
-      GERE UM JSON COM ESTA ESTRUTURA EXATA (Seja denso, rico e persuasivo):
+      GERE UM JSON ESTRUTURADO E RICO (Sem Markdown, apenas JSON puro):
       {
-        "archetype": "Um Título de Arquétipo Poderoso e Único (Ex: O Visionário Solitário, O Executor Implacável)",
-        "summary": "Uma análise psicológica profunda de 3 parágrafos. O primeiro valida o ego dele (forças). O segundo destrói as ilusões (fraquezas ocultas). O terceiro mostra a visão de futuro se ele corrigir isso. Use linguagem 'Cold Reading' (ex: 'Você sente que muitas vezes carrega a equipe nas costas...').",
+        "archetype": "Crie um nome de Arquétipo Único e Poderoso (ex: O Construtor de Impérios, O Estrategista Cauteloso)",
+        "summary": "Escreva 3 parágrafos densos. Parágrafo 1: Valide quem ele é usando as respostas dele ('Você sente que...'). Parágrafo 2: Aponte a dor oculta que ele não admite. Parágrafo 3: A visão de quem ele pode se tornar.",
         "dimensions": [
           { 
-            "name": "Nome da Dimensão (ex: Foco)", 
-            "score": (número do score), 
-            "analysis": "Um parágrafo denso explicando não só a nota, mas COMO isso se manifesta no dia a dia dele e qual o impacto financeiro/emocional." 
+            "name": "Foco", 
+            "score": ${t.scores.Foco}, 
+            "analysis": "Análise profunda de 3-4 frases. Explique o impacto disso na conta bancária e na felicidade dele." 
+          },
+          { 
+            "name": "Adaptabilidade", 
+            "score": ${t.scores.Adaptabilidade}, 
+            "analysis": "Análise profunda de 3-4 frases. Como ele lida com crises?" 
+          },
+          { 
+            "name": "Inovação", 
+            "score": ${t.scores.Inovacao}, 
+            "analysis": "Análise profunda de 3-4 frases. Ele cria ou apenas segue?" 
+          },
+          { 
+            "name": "Coragem", 
+            "score": ${t.scores.Coragem}, 
+            "analysis": "Análise profunda de 3-4 frases. O medo está travando ele?" 
+          },
+          { 
+            "name": "Inteligência Social", 
+            "score": ${t.scores.InteligenciaSocial}, 
+            "analysis": "Análise profunda de 3-4 frases. Ele lidera ou manipula?" 
           }
-          // ... repetir para as 5 dimensões
         ],
-        "blindSpot": "O Insight Matador. Uma verdade dura que ele provavelmente nega, mas que é a raiz dos problemas dele. Escreva de forma direta e impactante.",
+        "blindSpot": "O Ponto Cego Fatal. Uma frase longa e impactante que resume o maior defeito dele.",
         "actionPlan": [
-          "Ação 1: Algo prático, técnico e imediato para fazer amanhã.",
-          "Ação 2: Uma mudança de mindset ou rotina baseada em neurociência/produtividade.",
-          "Ação 3: Um desafio comportamental para a próxima semana.",
-          "Ação 4: Uma ferramenta ou técnica específica para usar."
+          "Passo 1: Uma ação prática e imediata para amanhã.",
+          "Passo 2: Uma mudança de hábito mental.",
+          "Passo 3: Um desafio de desconforto para evoluir.",
+          "Passo 4: Uma estratégia de longo prazo."
         ]
       }
     `;
@@ -203,6 +217,7 @@ app.get('/api/report/full/:transactionId', async (req, res) => {
   } catch (e) { console.error(e); res.status(500).json({message: 'Erro IA'}); }
 });
 
+// WEBHOOKS E ROTAS PADRÃO
 app.post('/api/kiwify-webhook', (req, res) => {
   const d = req.body;
   const tid = d.aff_content || (d.order && d.order.src);
