@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { fetchFullReport, FullReportData } from '../services/apiService';
 import { Card, CardContent } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
-import { CheckCircle, Target, TrendingUp, Lock, Download, LogOut, Share2, Brain, Zap, AlertTriangle } from 'lucide-react';
+import { CheckCircle, Target, TrendingUp, Lock, Download, LogOut, Share2, AlertOctagon, Zap, Brain, AlertTriangle } from 'lucide-react';
 import { Radar } from 'react-chartjs-2';
 import {
   Chart as ChartJS,
@@ -53,7 +53,7 @@ export const ReportFull: React.FC<ReportFullProps> = ({ transactionId, onRestart
   }, [transactionId]);
 
   const handleShare = () => {
-    const url = window.location.href;
+    const url = `${window.location.origin}/?tid=${transactionId}`;
     navigator.clipboard.writeText(url);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
@@ -63,8 +63,8 @@ export const ReportFull: React.FC<ReportFullProps> = ({ transactionId, onRestart
     return (
       <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center text-white p-4 text-center font-sans">
         <div className="w-16 h-16 border-4 border-amber-500 border-t-transparent rounded-full animate-spin mb-6"></div>
-        <h2 className="text-2xl font-bold mb-2">Processando Análise Profunda...</h2>
-        <p className="text-slate-400 max-w-md">A IA está correlacionando suas respostas com 5 pilares de performance para gerar seu dossiê exclusivo.</p>
+        <h2 className="text-2xl font-bold mb-2">Gerando Dossiê Completo...</h2>
+        <p className="text-slate-400 max-w-md">A IA está compilando seus dados brutos e gerando seu plano de ação exclusivo.</p>
       </div>
     );
   }
@@ -74,17 +74,15 @@ export const ReportFull: React.FC<ReportFullProps> = ({ transactionId, onRestart
       <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center text-white p-4 font-sans">
         <Lock className="w-16 h-16 text-red-500 mb-4" />
         <h2 className="text-2xl font-bold mb-4">Acesso Pendente</h2>
-        <p className="text-slate-400 mb-6 text-center">Aguardando confirmação...</p>
-        <div className="flex gap-4">
-          <Button onClick={() => window.location.reload()}>Verificar</Button>
-          {onRestart && <Button variant="ghost" onClick={onRestart}>Sair</Button>}
-        </div>
+        <p className="text-slate-400 mb-6 text-center">Aguardando confirmação do pagamento...</p>
+        <Button onClick={() => window.location.reload()}>Verificar Novamente</Button>
       </div>
     );
   }
 
   if (!report) return null;
 
+  // ... (Configurações do ChartJS mantidas iguais)
   const chartData = {
     labels: report.dimensions.map(d => d.name),
     datasets: [
@@ -98,8 +96,8 @@ export const ReportFull: React.FC<ReportFullProps> = ({ transactionId, onRestart
         pointBorderColor: '#f59e11',
       },
       {
-        label: 'Benchmark Global',
-        data: [80, 80, 80, 80, 80],
+        label: 'Alta Performance',
+        data: [85, 85, 85, 85, 85],
         backgroundColor: 'rgba(148, 163, 184, 0.05)',
         borderColor: 'rgba(148, 163, 184, 0.2)',
         borderWidth: 1,
@@ -109,25 +107,22 @@ export const ReportFull: React.FC<ReportFullProps> = ({ transactionId, onRestart
     ],
   };
 
-  const chartOptions = {
-    scales: {
-      r: {
-        angleLines: { color: 'rgba(255, 255, 255, 0.1)' },
-        grid: { color: 'rgba(255, 255, 255, 0.1)' },
-        pointLabels: { color: '#94a3b8', font: { size: 10, weight: 'bold' as const } },
-        ticks: { display: false },
-        suggestedMin: 0,
-        suggestedMax: 100,
-      }
-    },
-    plugins: { legend: { labels: { color: '#cbd5e1' } } },
-    maintainAspectRatio: false
-  };
+  const chartOptions = { scales: { r: { angleLines: { color: 'rgba(255, 255, 255, 0.1)' }, grid: { color: 'rgba(255, 255, 255, 0.1)' }, pointLabels: { color: '#94a3b8', font: { size: 10, weight: 'bold' as const } }, ticks: { display: false }, suggestedMin: 0, suggestedMax: 100 } }, plugins: { legend: { labels: { color: '#cbd5e1' } } }, maintainAspectRatio: false };
+
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 font-sans pb-20 animate-fade-in print-content">
       
       <header className="bg-slate-900 border-b border-slate-800 sticky top-0 z-20 shadow-lg no-print">
+        
+        {/* AVISO DE SEGURANÇA (NOVO) */}
+        <div className="bg-amber-900/30 border-b border-amber-900/50 py-2 px-4 text-center">
+          <p className="text-amber-200 text-xs font-bold flex items-center justify-center gap-2">
+            <AlertOctagon className="w-4 h-4" />
+            ATENÇÃO: Salve este relatório agora (PDF ou Link). Ao fechar esta página, os dados serão apagados por segurança.
+          </p>
+        </div>
+
         <div className="max-w-6xl mx-auto px-4 sm:px-6 py-4 flex justify-between items-center">
           <div className="flex items-center gap-2">
             <Target className="text-amber-500 w-5 h-5" />
@@ -135,15 +130,15 @@ export const ReportFull: React.FC<ReportFullProps> = ({ transactionId, onRestart
           </div>
           <div className="flex items-center gap-2">
             <Button size="sm" variant="outline" onClick={handleShare}>{copied ? 'Link Copiado' : 'Salvar Link'}</Button>
-            <Button size="sm" onClick={() => window.print()}><Download className="w-4 h-4 mr-2" /> PDF</Button>
-            {onRestart && <Button size="sm" variant="ghost" onClick={onRestart} title="Nova Análise"><LogOut className="w-4 h-4" /></Button>}
+            <Button size="sm" onClick={() => window.print()}><Download className="w-4 h-4 mr-2" /> Baixar PDF</Button>
+            {onRestart && <Button size="sm" variant="ghost" onClick={onRestart} title="Sair e Apagar"><LogOut className="w-4 h-4" /></Button>}
           </div>
         </div>
       </header>
 
       <main className="max-w-6xl mx-auto px-4 sm:px-6 py-10 space-y-16">
         
-        {/* 1. IDENTIDADE (ARQUÉTIPO) */}
+        {/* 1. ARQUÉTIPO */}
         <section className="text-center space-y-8 break-inside-avoid">
           <div>
             <span className="text-amber-500 text-xs font-bold tracking-[0.2em] uppercase mb-3 block">Diagnóstico Final</span>
@@ -219,9 +214,9 @@ export const ReportFull: React.FC<ReportFullProps> = ({ transactionId, onRestart
           </div>
         </section>
         
-        <div className="text-center pb-10 pt-10 border-t border-slate-800/50">
+        <div className="text-center pb-10 pt-10 border-t border-slate-800/50 no-print">
            <Button variant="ghost" onClick={onRestart} className="text-slate-500 hover:text-white">
-             Fazer Nova Análise
+             Fazer Nova Análise (Apaga dados atuais)
            </Button>
            <p className="text-slate-700 text-xs mt-4 font-mono">ID: {transactionId} • Gerado em {new Date().toLocaleDateString()}</p>
         </div>
