@@ -1,30 +1,14 @@
-import { QuizData, TransactionResponse } from '../types';
+import type { QuizData, TransactionResponse, PreviewResponse, FullReportData } from '../types';
 
-// --- CONFIGURAÇÃO DA URL DA API ---
-// Se estiver em produção (Render), usa a URL real.
-// Se estiver local, usa o localhost:4000.
-const isProduction = (import.meta as any).env.PROD;
-const API_BASE_URL = isProduction 
-  ? 'https://quiz-comportamental.onrender.com/api' 
-  : 'http://localhost:4000/api';
+// The backend proxy is set up in vite.config.ts, so we only need the relative path.
+const API_BASE_URL = '/api';
 
-console.log(`[API SERVICE] Conectando em: ${API_BASE_URL} (Prod: ${isProduction})`);
-
-// --- TIPOS DO RELATÓRIO (Compatível com o JSON da IA) ---
-export interface FullReportData {
-  archetype: string;
-  summary: string;
-  dimensions: Array<{
-    name: string;
-    score: number;
-    analysis: string;
-  }>;
-  blindSpot: string;
-  actionPlan: string[];
-}
-
-// 1. INICIAR CHECKOUT (Envia as respostas e recebe o ID da transação)
-export const startCheckout = async (quizData: QuizData): Promise<TransactionResponse> => {
+/**
+ * 1. Submits the completed quiz data to the backend.
+ * @param quizData The user's answers and the questions they were shown.
+ * @returns A promise that resolves to an object containing the unique transactionId.
+ */
+export const submitQuiz = async (quizData: QuizData): Promise<TransactionResponse> => {
   try {
     const response = await fetch(`${API_BASE_URL}/quiz/submit`, {
       method: 'POST',
@@ -33,57 +17,59 @@ export const startCheckout = async (quizData: QuizData): Promise<TransactionResp
     });
 
     if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      throw new Error(errorData.message || 'Erro ao salvar respostas.');
+      const errorData = await response.json().catch(() => ({ message: 'Erro desconhecido ao salvar respostas.' }));
+      throw new Error(errorData.message);
     }
-
     return await response.json();
   } catch (error) {
-    console.error("Erro no startCheckout:", error);
+    console.error("Error in submitQuiz:", error);
     throw error;
   }
 };
 
-// 2. OBTER PRÉVIA (Busca o gancho persuasivo gerado pela IA)
-export const fetchReportPreview = async (transactionId: string): Promise<{ previewText: string }> => {
-  try {
-    const response = await fetch(`${API_BASE_URL}/report/preview`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ transactionId }),
-    });
+/**
+ * 2. Fetches the persuasive AI-generated preview text for the report.
+ * @param transactionId The unique ID for the user's quiz session.
+ * @returns A promise that resolves to an object containing the preview text.
+ */
+export const fetchReportPreview = async (transactionId: string): Promise<PreviewResponse> => {
+    try {
+        const response = await fetch(`${API_BASE_URL}/report/preview`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ transactionId }),
+        });
 
-    if (!response.ok) {
-      throw new Error('Erro ao obter prévia.');
+        if (!response.ok) {
+            throw new Error('Erro ao obter a prévia do relatório.');
+        }
+        return await response.json();
+    } catch (error) {
+        console.error("Error in fetchReportPreview:", error);
+        throw error;
     }
-
-    return await response.json();
-  } catch (error) {
-    console.error("Erro no fetchReportPreview:", error);
-    throw error;
-  }
 };
 
-// 3. OBTER RELATÓRIO COMPLETO (Busca o JSON detalhado após o pagamento)
+/**
+ * 3. Fetches the full, detailed report data after a successful payment.
+ * @param transactionId The unique ID for the user's quiz session.
+ * @returns A promise that resolves to the complete report data.
+ */
 export const fetchFullReport = async (transactionId: string): Promise<FullReportData> => {
-  try {
-    const response = await fetch(`${API_BASE_URL}/report/full/${transactionId}`, {
-      method: 'GET',
-      headers: { 'Content-Type': 'application/json' }
-    });
-    
-    // Tratamento específico para pagamento pendente (Retorno 403 do backend)
-    if (response.status === 403) {
-      throw new Error('PAYMENT_REQUIRED');
-    }
-    
-    if (!response.ok) {
-      throw new Error('Erro ao gerar relatório.');
-    }
+    try {
+        const response = await fetch(`${API_BASE_URL}/report/full/${transactionId}`);
 
-    return await response.json();
-  } catch (error) {
-    console.error("Erro no fetchFullReport:", error);
-    throw error;
-  }
+        // The backend returns a 403 status if the payment for this transactionId is not yet confirmed.
+        if (response.status === 403) {
+            throw new Error('PAYMENT_REQUIRED');
+        }
+
+        if (!response.ok) {
+            throw new Error('Erro ao gerar o relatório completo.');
+        }
+        return await response.json();
+    } catch (error) {
+        console.error("Error in fetchFullReport:", error);
+        throw error;
+    }
 };
