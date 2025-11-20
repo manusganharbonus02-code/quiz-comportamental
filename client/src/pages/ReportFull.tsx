@@ -1,27 +1,13 @@
 import React, { useEffect, useState } from 'react';
-import { fetchFullReport, FullReportData } from '../services/apiService';
-import { Card, CardContent } from '../components/ui/Card';
+import { fetchFullReport } from '../services/apiService';
+import type { FullReportData } from '../types';
+import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
-import { CheckCircle, Target, TrendingUp, Lock, Download, LogOut, Share2, AlertOctagon, Zap, Brain, AlertTriangle } from 'lucide-react';
+import { Download, LogOut, Share2, AlertTriangle, Zap, TrendingUp, Lock } from 'lucide-react';
 import { Radar } from 'react-chartjs-2';
-import {
-  Chart as ChartJS,
-  RadialLinearScale,
-  PointElement,
-  LineElement,
-  Filler,
-  Tooltip,
-  Legend,
-} from 'chart.js';
+import { Chart as ChartJS, RadialLinearScale, PointElement, LineElement, Filler, Tooltip, Legend, ChartOptions } from 'chart.js';
 
-ChartJS.register(
-  RadialLinearScale,
-  PointElement,
-  LineElement,
-  Filler,
-  Tooltip,
-  Legend
-);
+ChartJS.register(RadialLinearScale, PointElement, LineElement, Filler, Tooltip, Legend);
 
 interface ReportFullProps {
   transactionId: string;
@@ -71,18 +57,26 @@ export const ReportFull: React.FC<ReportFullProps> = ({ transactionId, onRestart
 
   if (error === 'PAYMENT_REQUIRED') {
     return (
-      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center text-white p-4 font-sans">
+      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center text-white p-4 font-sans text-center">
         <Lock className="w-16 h-16 text-red-500 mb-4" />
         <h2 className="text-2xl font-bold mb-4">Acesso Pendente</h2>
-        <p className="text-slate-400 mb-6 text-center">Aguardando confirmação do pagamento...</p>
+        <p className="text-slate-400 mb-6">Aguardando confirmação do pagamento...</p>
         <Button onClick={() => window.location.reload()}>Verificar Novamente</Button>
       </div>
     );
   }
 
-  if (!report) return null;
-
-  // ... (Configurações do ChartJS mantidas iguais)
+  if (!report) {
+    return (
+        <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center text-white p-4 font-sans text-center">
+            <AlertTriangle className="w-16 h-16 text-red-500 mb-4" />
+            <h2 className="text-2xl font-bold mb-4">Erro ao Carregar</h2>
+            <p className="text-slate-400 mb-6">{error || 'Não foi possível carregar o relatório.'}</p>
+            <Button onClick={onRestart}>Voltar ao Início</Button>
+        </div>
+    );
+  }
+  
   const chartData = {
     labels: report.dimensions.map(d => d.name),
     datasets: [
@@ -107,29 +101,38 @@ export const ReportFull: React.FC<ReportFullProps> = ({ transactionId, onRestart
     ],
   };
 
-  const chartOptions = { scales: { r: { angleLines: { color: 'rgba(255, 255, 255, 0.1)' }, grid: { color: 'rgba(255, 255, 255, 0.1)' }, pointLabels: { color: '#94a3b8', font: { size: 10, weight: 'bold' as const } }, ticks: { display: false }, suggestedMin: 0, suggestedMax: 100 } }, plugins: { legend: { labels: { color: '#cbd5e1' } } }, maintainAspectRatio: false };
-
+  const chartOptions: ChartOptions<'radar'> = {
+    scales: {
+      r: {
+        angleLines: { color: 'rgba(255, 255, 255, 0.1)' },
+        grid: { color: 'rgba(255, 255, 255, 0.1)' },
+        pointLabels: { color: '#94a3b8', font: { size: 10, weight: 'bold' } },
+        ticks: { display: false },
+        suggestedMin: 0,
+        suggestedMax: 100
+      }
+    },
+    plugins: {
+      legend: { labels: { color: '#cbd5e1' } }
+    },
+    maintainAspectRatio: false
+  };
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 font-sans pb-20 animate-fade-in print-content">
-      
       <header className="bg-slate-900 border-b border-slate-800 sticky top-0 z-20 shadow-lg no-print">
-        
-        {/* AVISO DE SEGURANÇA (NOVO) */}
-        <div className="bg-amber-900/30 border-b border-amber-900/50 py-2 px-4 text-center">
-          <p className="text-amber-200 text-xs font-bold flex items-center justify-center gap-2">
-            <AlertOctagon className="w-4 h-4" />
-            ATENÇÃO: Salve este relatório agora (PDF ou Link). Ao fechar esta página, os dados serão apagados por segurança.
+        <div className="bg-red-950/70 border-b border-red-700/50 py-3 px-4 text-center backdrop-blur-sm">
+          <p className="text-red-200 text-sm font-medium flex items-center justify-center gap-3">
+            <AlertTriangle className="w-5 h-5 shrink-0 text-red-400" />
+            <span>
+              <strong>AÇÃO OBRIGATÓRIA:</strong> Este relatório é temporário e será <strong>apagado para sempre</strong> ao fechar. Salve-o (PDF ou Link) para garantir seu acesso.
+            </span>
           </p>
         </div>
-
         <div className="max-w-6xl mx-auto px-4 sm:px-6 py-4 flex justify-between items-center">
+          <h1 className="font-bold text-lg hidden sm:block">Dossiê Executivo</h1>
           <div className="flex items-center gap-2">
-            <Target className="text-amber-500 w-5 h-5" />
-            <h1 className="font-bold text-lg hidden sm:block">Dossiê Executivo</h1>
-          </div>
-          <div className="flex items-center gap-2">
-            <Button size="sm" variant="outline" onClick={handleShare}>{copied ? 'Link Copiado' : 'Salvar Link'}</Button>
+            <Button size="sm" variant="outline" onClick={handleShare}>{copied ? 'Link Copiado!' : 'Salvar Link'}</Button>
             <Button size="sm" onClick={() => window.print()}><Download className="w-4 h-4 mr-2" /> Baixar PDF</Button>
             {onRestart && <Button size="sm" variant="ghost" onClick={onRestart} title="Sair e Apagar"><LogOut className="w-4 h-4" /></Button>}
           </div>
@@ -137,90 +140,61 @@ export const ReportFull: React.FC<ReportFullProps> = ({ transactionId, onRestart
       </header>
 
       <main className="max-w-6xl mx-auto px-4 sm:px-6 py-10 space-y-16">
-        
-        {/* 1. ARQUÉTIPO */}
         <section className="text-center space-y-8 break-inside-avoid">
           <div>
             <span className="text-amber-500 text-xs font-bold tracking-[0.2em] uppercase mb-3 block">Diagnóstico Final</span>
-            <h1 className="text-3xl md:text-5xl font-extrabold text-white tracking-tight leading-tight mb-4">
-              {report.archetype}
-            </h1>
+            <h1 className="text-3xl md:text-5xl font-extrabold text-white tracking-tight leading-tight mb-4">{report.archetype}</h1>
             <div className="w-24 h-1 bg-amber-500 mx-auto rounded-full"></div>
           </div>
-          
-          <div className="bg-slate-900/50 border-l-4 border-amber-500 p-6 md:p-10 text-left rounded-r-xl">
-             <p className="text-lg md:text-xl text-slate-300 leading-relaxed whitespace-pre-line font-light">
-               {report.summary}
-             </p>
-          </div>
+          <Card className="bg-slate-900/50 border-l-4 border-amber-500 p-6 md:p-10 text-left rounded-r-xl">
+            <p className="text-lg md:text-xl text-slate-300 leading-relaxed whitespace-pre-line font-light">{report.summary}</p>
+          </Card>
         </section>
 
-        {/* 2. RAIO-X TÉCNICO */}
         <section className="grid lg:grid-cols-2 gap-12 items-start break-inside-avoid">
-          <div className="bg-slate-900 rounded-2xl border border-slate-800 p-4 flex flex-col items-center shadow-2xl">
-             <h3 className="text-white font-bold mb-4 flex items-center gap-2"><TrendingUp className="text-amber-500 w-5 h-5"/> Mapa de Competências</h3>
-             <div className="w-full aspect-square max-w-[400px] relative">
-                <Radar data={chartData} options={chartOptions} />
-             </div>
-          </div>
-          
-          <div className="space-y-6">
-             {report.dimensions.map((dim) => (
-               <div key={dim.name} className="bg-slate-900/30 rounded-xl p-5 border border-slate-800/50 hover:border-amber-500/20 transition-colors">
-                 <div className="flex justify-between items-center mb-3">
-                   <h4 className="font-bold text-white text-lg">{dim.name}</h4>
-                   <span className={`text-sm font-mono px-2 py-1 rounded font-bold ${dim.score > 75 ? 'bg-green-500/10 text-green-400' : dim.score < 50 ? 'bg-red-500/10 text-red-400' : 'bg-amber-500/10 text-amber-400'}`}>
-                     {dim.score}/100
-                   </span>
-                 </div>
-                 <p className="text-slate-400 text-sm leading-relaxed border-t border-slate-800 pt-3">
-                   {dim.analysis}
-                 </p>
-               </div>
-             ))}
-          </div>
-        </section>
-
-        {/* 3. A VERDADE BRUTAL (PONTO CEGO) */}
-        <section className="break-inside-avoid">
-          <div className="bg-gradient-to-r from-red-950/40 to-slate-900 border border-red-900/30 rounded-2xl p-8 flex flex-col md:flex-row gap-6 items-center shadow-[0_0_30px_rgba(127,29,29,0.1)]">
-             <div className="bg-red-500/10 p-4 rounded-full shrink-0">
-               <AlertTriangle className="text-red-500 w-10 h-10" />
-             </div>
-             <div className="text-center md:text-left">
-               <h3 className="text-xl font-bold text-white mb-2 uppercase tracking-wider">Alerta de Ponto Cego</h3>
-               <p className="text-red-100/90 text-lg font-medium italic">
-                 "{report.blindSpot}"
-               </p>
-             </div>
-          </div>
-        </section>
-
-        {/* 4. PROTOCOLO DE AÇÃO */}
-        <section className="bg-slate-900 rounded-3xl p-8 md:p-12 border border-slate-800 relative overflow-hidden break-inside-avoid">
-          <div className="absolute top-0 right-0 w-64 h-64 bg-amber-500/5 rounded-full blur-3xl pointer-events-none"></div>
-          
-          <h3 className="text-2xl md:text-3xl font-bold text-white mb-10 text-center relative z-10 flex justify-center items-center gap-3">
-            <Zap className="text-amber-500 w-8 h-8" /> Plano de Ação Imediato
-          </h3>
-          
-          <div className="grid md:grid-cols-2 gap-6 relative z-10">
-            {report.actionPlan.map((action, idx) => (
-              <div key={idx} className="bg-slate-950 p-6 rounded-xl border-l-4 border-amber-600 shadow-lg flex gap-4">
-                <span className="text-4xl font-bold text-slate-800">{idx + 1}</span>
-                <p className="text-slate-200 text-lg leading-relaxed self-center">{action}</p>
-              </div>
-            ))}
-          </div>
+            <Card className="bg-slate-900 p-4 flex flex-col items-center shadow-2xl">
+              <h3 className="text-white font-bold mb-4 flex items-center gap-2"><TrendingUp className="text-amber-500 w-5 h-5"/> Mapa de Competências</h3>
+              <div className="w-full aspect-square max-w-[400px] relative"><Radar data={chartData} options={chartOptions} /></div>
+            </Card>
+            <div className="space-y-6">
+                {report.dimensions.map((dim) => (
+                    <div key={dim.name} className="bg-slate-900/30 rounded-xl p-5 border border-slate-800/50 hover:border-amber-500/20 transition-colors">
+                        <div className="flex justify-between items-center mb-3">
+                            <h4 className="font-bold text-white text-lg">{dim.name}</h4>
+                            <span className={`text-sm font-mono px-2 py-1 rounded font-bold ${dim.score > 75 ? 'bg-green-500/10 text-green-400' : dim.score < 50 ? 'bg-red-500/10 text-red-400' : 'bg-amber-500/10 text-amber-400'}`}>{dim.score}/100</span>
+                        </div>
+                        <p className="text-slate-400 text-sm leading-relaxed border-t border-slate-800 pt-3">{dim.analysis}</p>
+                    </div>
+                ))}
+            </div>
         </section>
         
-        <div className="text-center pb-10 pt-10 border-t border-slate-800/50 no-print">
-           <Button variant="ghost" onClick={onRestart} className="text-slate-500 hover:text-white">
-             Fazer Nova Análise (Apaga dados atuais)
-           </Button>
-           <p className="text-slate-700 text-xs mt-4 font-mono">ID: {transactionId} • Gerado em {new Date().toLocaleDateString()}</p>
-        </div>
+        <section className="break-inside-avoid">
+            <div className="bg-gradient-to-r from-red-950/40 to-slate-900 border border-red-900/30 rounded-2xl p-8 flex flex-col md:flex-row gap-6 items-center shadow-[0_0_30px_rgba(127,29,29,0.1)]">
+                <div className="bg-red-500/10 p-4 rounded-full shrink-0"><AlertTriangle className="text-red-500 w-10 h-10" /></div>
+                <div className="text-center md:text-left">
+                    <h3 className="text-xl font-bold text-white mb-2 uppercase tracking-wider">Alerta de Ponto Cego</h3>
+                    <p className="text-red-100/90 text-lg font-medium italic">"{report.blindSpot}"</p>
+                </div>
+            </div>
+        </section>
 
+        <section className="bg-slate-900 rounded-3xl p-8 md:p-12 border border-slate-800 relative overflow-hidden break-inside-avoid">
+            <div className="absolute top-0 right-0 w-64 h-64 bg-amber-500/5 rounded-full blur-3xl pointer-events-none"></div>
+            <h3 className="text-2xl md:text-3xl font-bold text-white mb-10 text-center relative z-10 flex justify-center items-center gap-3"><Zap className="text-amber-500 w-8 h-8"/> Plano de Ação Imediato</h3>
+            <div className="grid md:grid-cols-2 gap-6 relative z-10">
+                {report.actionPlan.map((action, idx) => (
+                    <div key={idx} className="bg-slate-950 p-6 rounded-xl border-l-4 border-amber-600 shadow-lg flex gap-4 items-center">
+                        <span className="text-4xl font-bold text-slate-700">{idx + 1}</span>
+                        <p className="text-slate-200 text-lg leading-relaxed">{action}</p>
+                    </div>
+                ))}
+            </div>
+        </section>
+        
+        <div className="text-center pt-10 border-t border-slate-800/50 no-print">
+            <p className="text-slate-700 text-xs mt-4 font-mono">ID: {transactionId} • Gerado em {new Date().toLocaleDateString()}</p>
+        </div>
       </main>
     </div>
   );
