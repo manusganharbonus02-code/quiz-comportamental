@@ -42,8 +42,8 @@ export const fetchReportPreview = async (transactionId: string): Promise<{ previ
       body: JSON.stringify({ transactionId }),
     });
 
+    // MELHORIA: Captura a mensagem de erro específica do servidor
     if (!response.ok) {
-      // Captura a mensagem de erro específica do servidor
       const errorBody = await response.json().catch(() => ({ message: 'Erro desconhecido ao contatar o servidor.' }));
       throw new Error(errorBody.message);
     }
