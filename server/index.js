@@ -43,46 +43,60 @@ if (clientDistPath) {
 // --- BANCO DE DADOS EM MEMÓRIA ---
 const transactions = new Map();
 
-// --- LÓGICA DE ANÁLISE QUALITATIVA ---
+// --- LÓGICA DE ANÁLISE QUALITATIVA (VERSÃO FINAL ROBUSTA) ---
 const calculateScores = (answers, questions) => {
+  if (!answers || typeof answers !== 'object' || !questions || !Array.isArray(questions)) {
+    console.error('[calculateScores] Dados de entrada inválidos.');
+    throw new Error("Dados de entrada inválidos para calculateScores.");
+  }
+
   const scores = { Foco: 0, Adaptabilidade: 0, Inovacao: 0, Coragem: 0, InteligenciaSocial: 0 };
-  const counts = { ...scores };
-  let extremeBehaviors = [];
+  const counts = { Foco: 0, Adaptabilidade: 0, Inovacao: 0, Coragem: 0, InteligenciaSocial: 0 };
+  const extremeBehaviors = [];
 
-  questions.forEach(q => {
-    const val = answers[q.id] || 0;
-    let key = q.module;
-     if (q.module === 'Inovação') key = 'Inovacao';
-     if (q.module === 'InteligênciaSocial') key = 'InteligenciaSocial';
+  for (const q of questions) {
+    if (!q || typeof q.id === 'undefined' || typeof q.module !== 'string') {
+      continue;
+    }
 
+    const key = q.module;
+    
+    if (Object.prototype.hasOwnProperty.call(scores, key)) {
+      const val = answers[q.id];
 
-    if (scores[key] !== undefined) {
-      scores[key] += val;
-      counts[key] += 1;
+      if (typeof val === 'number' && val >= 1 && val <= 5) {
+        scores[key] += val;
+        counts[key] += 1;
 
-      if (val === 1) {
-        extremeBehaviors.push(`que não consegue: "${q.text}"`);
-      } else if (val === 5) {
-        extremeBehaviors.push(`que afirma com certeza: "${q.text}"`);
+        if (val === 1) {
+          extremeBehaviors.push(`admite que não consegue: "${q.text}"`);
+        } else if (val === 5) {
+          extremeBehaviors.push(`afirma com certeza que: "${q.text}"`);
+        }
       }
     }
-  });
+  }
 
-  Object.keys(scores).forEach(k => {
-    if (counts[k] > 0) {
-      scores[k] = Math.round((scores[k] / (counts[k] * 5)) * 100);
+  for (const key in scores) {
+    if (Object.prototype.hasOwnProperty.call(scores, key)) {
+        if (counts[key] > 0) {
+          const maxScoreForModule = counts[key] * 5;
+          scores[key] = Math.round((scores[key] / maxScoreForModule) * 100);
+        }
     }
-  });
+  }
 
   return { scores, extremeBehaviors };
 };
 
-// --- ROTAS DA API ---
 
+// --- ROTAS DA API ---
 app.post('/api/quiz/submit', (req, res) => {
   try {
     const { answers, questions } = req.body;
-    if (!answers || !questions) return res.status(400).json({ message: 'Dados inválidos' });
+    if (!answers || !questions) {
+      return res.status(400).json({ message: 'Dados inválidos' });
+    }
     const transactionId = uuidv4();
     const { scores, extremeBehaviors } = calculateScores(answers, questions);
 
@@ -96,8 +110,8 @@ app.post('/api/quiz/submit', (req, res) => {
     });
     res.status(201).json({ transactionId });
   } catch (e) {
-    console.error(e);
-    res.status(500).json({ message: 'Erro interno' });
+    console.error("Erro em /api/quiz/submit:", e);
+    res.status(500).json({ message: 'Erro interno no servidor' });
   }
 });
 
@@ -109,7 +123,6 @@ app.post('/api/report/preview', async (req, res) => {
 
         if (!ai) return res.json({ previewText: "Seu perfil indica um potencial executivo extremamente alto, mas existe uma barreira invisível em sua tomada de decisão que está custando oportunidades financeiras." });
 
-        // PROMPT ATUALIZADO E PERSUASIVO
         const prompt = `
             ATUE COMO: Um psicólogo organizacional de elite, finalizando um Dossiê Comportamental.
             SUA MISSÃO: Escrever uma nota de capa (40-50 palavras) para o cliente. A nota deve ser um gancho de venda poderoso, dando uma amostra real e específica do relatório, criando urgência para a leitura completa.
