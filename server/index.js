@@ -10,9 +10,11 @@ import fs from 'fs';
 const app = express();
 const PORT = process.env.PORT || 10000;
 
+// --- CONFIGURAÇÃO DE CAMINHOS ---
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+// --- CONFIGURAÇÃO DA IA ---
 const apiKey = process.env.API_KEY;
 if (!apiKey) {
   console.warn("API_KEY do Google não encontrada. O serviço de IA ficará desabilitado.");
@@ -22,11 +24,13 @@ const ai = apiKey ? new GoogleGenAI({ apiKey }) : null;
 app.use(cors());
 app.use(express.json());
 
+// --- LOCALIZAR O FRONTEND ---
 const searchPaths = [
   path.join(__dirname, '../client/dist'),
   path.join(process.cwd(), 'client/dist'),
   path.resolve('/opt/render/project/src/client/dist')
 ];
+
 let clientDistPath = null;
 for (const p of searchPaths) {
   if (fs.existsSync(p) && fs.existsSync(path.join(p, 'index.html'))) {
@@ -34,12 +38,15 @@ for (const p of searchPaths) {
     break;
   }
 }
+
 if (clientDistPath) {
   app.use(express.static(clientDistPath));
 }
 
+// --- BANCO DE DADOS EM MEMÓRIA ---
 const transactions = new Map();
 
+// --- LÓGICA DE ANÁLISE QUALITATIVA ---
 const calculateScores = (answers, questions) => {
   if (!answers || typeof answers !== 'object' || !questions || !Array.isArray(questions)) {
     throw new Error("Dados de entrada inválidos para calculateScores.");
@@ -66,6 +73,7 @@ const calculateScores = (answers, questions) => {
   return { scores, extremeBehaviors };
 };
 
+// --- ROTAS DA API ---
 app.post('/api/quiz/submit', (req, res) => {
   try {
     const { answers, questions } = req.body;
@@ -90,17 +98,26 @@ app.post('/api/report/preview', async (req, res) => {
         return res.status(503).json({ message: "Serviço de IA indisponível." });
     }
 
+    // LÓGICA INTELIGENTE PARA O PROMPT
+    let strategyPrompt;
+    if (t.extremeBehaviors.length > 0) {
+        // Estratégia A: Usa uma confissão real
+        strategyPrompt = `2. VALIDE UMA CONFISSÃO: Aponte que a admissão do usuário sobre "${t.extremeBehaviors[0]}" é o sintoma de um problema maior e conecte isso ao seu score MAIS BAIXO. Insinue um custo financeiro ou de oportunidade.`;
+    } else {
+        // Estratégia B: Usa a pontuação mais baixa se não houver confissões
+        const lowestScore = Object.entries(t.scores).sort((a, b) => a[1] - b[1])[0];
+        strategyPrompt = `2. VALIDE UMA FRAQUEZA: Aponte que o score de ${lowestScore[1]} em "${lowestScore[0]}" é um gargalo de performance que está limitando seus resultados financeiros.`;
+    }
+
     const prompt = `
         ATUE COMO: Um psicólogo organizacional de elite, finalizando um Dossiê Comportamental.
         SUA MISSÃO: Escrever uma nota de capa (40-50 palavras) para o cliente. A nota deve ser um gancho de venda poderoso, dando uma amostra real e específica do relatório, criando urgência para a leitura completa.
-        DADOS DO CLIENTE:
-        - Scores: ${JSON.stringify(t.scores)}
-        - Confissões (respostas extremas onde o usuário marcou 'Discordo Totalmente' ou 'Concordo Totalmente'): ${JSON.stringify(t.extremeBehaviors.slice(0, 3))}
+
         ESTRATÉGIA:
         1. Inicie validando o perfil: "Após analisar suas respostas, um padrão se destacou..."
-        2. Cite DIRETAMENTE uma das 'Confissões' e conecte-a ao score MAIS BAIXO. Ex: "Sua dificuldade em '${t.extremeBehaviors[0]}', por exemplo, está ligada ao seu score em [Dimensão], e isso tem um custo financeiro que você talvez não perceba."
-        3. Crie mistério sobre a solução no relatório. Ex: "No dossiê, detalhamos o 'Protocolo de Refatoração' para reverter exatamente isso."
-        4. Tom de voz: Clínico, direto, revelador. Não use markdown ou aspas.
+        ${strategyPrompt}
+        3. CRIE CURIOSIDADE: Mencione que a solução está no "Protocolo de Otimização de Performance" detalhado no dossiê completo.
+        4. TOM DE VOZ: Clínico, direto, revelador. Não use markdown ou aspas.
     `;
     const response = await ai.models.generateContent({ model: 'gemini-2.5-flash', contents: prompt, config: { temperature: 0.75, maxOutputTokens: 150 } });
     res.json({ previewText: response.text.trim() });
@@ -109,6 +126,7 @@ app.post('/api/report/preview', async (req, res) => {
     res.status(500).json({ message: `Erro na IA. Verifique as configurações no Render. Causa: ${e.message}` });
   }
 });
+
 
 app.get('/api/report/full/:transactionId', async (req, res) => {
   // O código do relatório completo permanece o mesmo...
