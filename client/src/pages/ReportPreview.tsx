@@ -12,14 +12,19 @@ interface ReportPreviewProps {
 export const ReportPreview: React.FC<ReportPreviewProps> = ({ transactionId, onUnlock }) => {
   const [previewText, setPreviewText] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null); // Estado para guardar o erro
 
   useEffect(() => {
     const loadPreview = async () => {
+      setError(null);
+      setLoading(true);
       try {
         const data = await fetchReportPreview(transactionId);
         setPreviewText(data.previewText);
-      } catch (error) {
-        setPreviewText("Seu perfil indica um potencial executivo extremamente alto, mas existe uma barreira invisível em sua tomada de decisão que está custando oportunidades financeiras.");
+      } catch (err: any) {
+        // AGORA, NÓS GUARDAMOS A MENSAGEM DE ERRO REAL
+        console.error("Falha ao carregar a prévia:", err);
+        setError(err.message || "Ocorreu um erro desconhecido ao gerar seu insight.");
       } finally {
         setLoading(false);
       }
@@ -49,14 +54,23 @@ export const ReportPreview: React.FC<ReportPreviewProps> = ({ transactionId, onU
               <h3 className="text-amber-500 font-bold text-sm uppercase tracking-widest mb-3 flex items-center gap-2">
                 <AlertCircle className="w-5 h-5" /> Insight Crítico Revelado
               </h3>
-              {loading ? (
+              {loading && (
                 <div className="space-y-3 animate-pulse">
                   <div className="h-5 bg-slate-800 rounded w-full"></div>
                   <div className="h-5 bg-slate-800 rounded w-5/6"></div>
                 </div>
-              ) : (
-                <div className="text-xl md:text-2xl text-slate-200 font-medium italic leading-relaxed border-l-4 border-amber-500 pl-6">
-                  "{previewText}"
+              )}
+              {/* LÓGICA ATUALIZADA: MOSTRA O ERRO OU O INSIGHT */}
+              {!loading && (
+                <div className={`text-xl md:text-2xl font-medium italic leading-relaxed border-l-4 pl-6 ${error ? 'text-red-400 border-red-500' : 'text-slate-200 border-amber-500'}`}>
+                  {error ? (
+                    <>
+                      <p className="font-bold text-sm uppercase tracking-widest not-italic text-red-300">ERRO DO SERVIDOR</p>
+                      {error}
+                    </>
+                  ) : (
+                    `"${previewText}"`
+                  )}
                 </div>
               )}
             </div>
@@ -71,7 +85,6 @@ export const ReportPreview: React.FC<ReportPreviewProps> = ({ transactionId, onU
                   <li className="flex items-center gap-3"><CheckSquare className="text-amber-400"/> Um Plano de Ação Imediato com 4 protocolos</li>
                 </ul>
               </div>
-
               <div className="absolute inset-0 z-10 flex flex-col items-center justify-center text-center bg-gradient-to-t from-slate-950 via-slate-950/90 to-transparent p-6">
                 <div className="bg-slate-900 p-4 rounded-full border border-amber-500/30 mb-4 shadow-[0_0_30px_rgba(245,158,11,0.2)]">
                   <Lock className="w-8 h-8 text-amber-500" />
@@ -80,11 +93,7 @@ export const ReportPreview: React.FC<ReportPreviewProps> = ({ transactionId, onU
                 <p className="text-slate-400 mb-8 max-w-md text-sm md:text-base">
                   Acesse agora o plano de ação que pode redefinir sua performance e seus resultados financeiros.
                 </p>
-                <Button
-                  size="lg"
-                  onClick={onUnlock}
-                  className="w-full md:w-auto text-lg py-4 px-10 shadow-[0_0_20px_rgba(245,158,11,0.4)] animate-pulse-slow hover:scale-105 transform transition-all duration-200"
-                >
+                <Button size="lg" onClick={onUnlock} className="w-full md:w-auto text-lg py-4 px-10 shadow-[0_0_20px_rgba(245,158,11,0.4)] animate-pulse-slow hover:scale-105 transform transition-all duration-200">
                   DESBLOQUEAR ANÁLISE COMPLETA <ArrowRight className="ml-2 w-5 h-5" />
                 </Button>
                 <div className="mt-6 flex items-center gap-4 text-xs text-slate-500 uppercase tracking-widest font-semibold">
