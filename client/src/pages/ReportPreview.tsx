@@ -39,7 +39,7 @@ export const ReportPreview: React.FC<ReportPreviewProps> = ({ transactionId, onU
             Seu Padrão Comportamental foi <span className="text-transparent bg-clip-text bg-gradient-to-r from-amber-400 to-orange-500">Mapeado</span>
           </h2>
           <p className="text-slate-400 text-lg max-w-2xl mx-auto leading-relaxed">
-            Nossa IA processou suas respostas e identificou um insight crítico que define sua trajetória profissional.
+            Nosso sistema de análise processou suas respostas e identificou um insight crítico que define sua trajetória profissional.
           </p>
         </div>
 
@@ -47,7 +47,7 @@ export const ReportPreview: React.FC<ReportPreviewProps> = ({ transactionId, onU
           <CardContent className="p-6 md:p-10">
             <div className="mb-10">
               <h3 className="text-amber-500 font-bold text-sm uppercase tracking-widest mb-3 flex items-center gap-2">
-                <AlertCircle className="w-5 h-5" /> Insight Revelado
+                <AlertCircle className="w-5 h-5" /> Insight Crítico Revelado
               </h3>
               {loading ? (
                 <div className="space-y-3 animate-pulse">
