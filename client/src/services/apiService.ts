@@ -1,16 +1,21 @@
+// FIX: Manually define types for `import.meta.env` as the Vite client types are unavailable.
+declare global {
+  interface ImportMeta {
+    readonly env: {
+      readonly PROD: boolean;
+    };
+  }
+}
+
 import { QuizData, TransactionResponse, FullReportData } from '../types';
 
-// CONFIGURAÇÃO DA URL DA API
-// Se estiver em produção (Render), usa a URL real.
-// Se estiver local, usa o localhost:4000.
-const isProduction = (import.meta as any).env.PROD;
+const isProduction = import.meta.env.PROD;
 const API_BASE_URL = isProduction
   ? 'https://quiz-comportamental.onrender.com/api'
   : 'http://localhost:4000/api';
 
-console.log(`[API SERVICE] Conectando em: ${API_BASE_URL} (Prod: ${isProduction})`);
+console.log(`[API SERVICE] Connecting to: ${API_BASE_URL} (Prod: ${isProduction})`);
 
-// 1. INICIAR CHECKOUT (Envia as respostas e recebe o ID da transação)
 export const startCheckout = async (quizData: QuizData): Promise<TransactionResponse> => {
   try {
     const response = await fetch(`${API_BASE_URL}/quiz/submit`, {
@@ -18,19 +23,17 @@ export const startCheckout = async (quizData: QuizData): Promise<TransactionResp
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(quizData),
     });
-
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
       throw new Error(errorData.message || 'Erro ao salvar respostas.');
     }
     return await response.json();
   } catch (error) {
-    console.error("Erro no startCheckout:", error);
+    console.error("Error in startCheckout:", error);
     throw error;
   }
 };
 
-// 2. OBTER PRÉVIA (Busca o gancho persuasivo gerado pela IA)
 export const fetchReportPreview = async (transactionId: string): Promise<{ previewText: string }> => {
   try {
     const response = await fetch(`${API_BASE_URL}/report/preview`, {
@@ -39,35 +42,33 @@ export const fetchReportPreview = async (transactionId: string): Promise<{ previ
       body: JSON.stringify({ transactionId }),
     });
 
+    // MELHORIA: Captura a mensagem de erro específica do servidor
     if (!response.ok) {
-      throw new Error('Erro ao obter prévia.');
+      const errorBody = await response.json().catch(() => ({ message: 'Erro desconhecido ao contatar o servidor.' }));
+      throw new Error(errorBody.message);
     }
     return await response.json();
   } catch (error) {
-    console.error("Erro no fetchReportPreview:", error);
+    console.error("Error in fetchReportPreview:", error);
     throw error;
   }
 };
 
-// 3. OBTER RELATÓRIO COMPLETO (Busca o JSON detalhado após o pagamento)
 export const fetchFullReport = async (transactionId: string): Promise<FullReportData> => {
   try {
     const response = await fetch(`${API_BASE_URL}/report/full/${transactionId}`, {
       method: 'GET',
       headers: { 'Content-Type': 'application/json' }
     });
-
-    // Tratamento específico para pagamento pendente (Retorno 403 do backend)
     if (response.status === 403) {
       throw new Error('PAYMENT_REQUIRED');
     }
-
     if (!response.ok) {
       throw new Error('Erro ao gerar relatório.');
     }
     return await response.json();
   } catch (error) {
-    console.error("Erro no fetchFullReport:", error);
+    console.error("Error in fetchFullReport:", error);
     throw error;
   }
 };
