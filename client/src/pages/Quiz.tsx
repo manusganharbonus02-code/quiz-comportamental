@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Button } from '../components/ui/Button';
-import { Card, CardContent } from '../components-v2/ui/Card';
+import { Card, CardContent } from '../components/ui/Card';
 import { ALL_QUESTIONS, ANSWER_OPTIONS } from '../constants';
 import { startCheckout } from '../services/apiService';
 import { QuizData, Answers } from '../types';
