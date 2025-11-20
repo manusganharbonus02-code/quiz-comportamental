@@ -24,14 +24,11 @@ app.use(express.json());
 // --- LOCALIZAR O FRONTEND ---
 const searchPaths = [
   path.join(__dirname, '../client/dist'),
-  path.join(__dirname, '../../client/dist'),
   path.join(process.cwd(), 'client/dist'),
-  path.join(process.cwd(), 'dist'),
   path.resolve('/opt/render/project/src/client/dist')
 ];
 
 let clientDistPath = null;
-
 for (const p of searchPaths) {
   if (fs.existsSync(p) && fs.existsSync(path.join(p, 'index.html'))) {
     clientDistPath = p;
@@ -43,27 +40,26 @@ if (clientDistPath) {
   app.use(express.static(clientDistPath));
 }
 
-// BANCO DE DADOS EM MEMÓRIA
+// --- BANCO DE DADOS EM MEMÓRIA ---
 const transactions = new Map();
 
 // --- LÓGICA DE ANÁLISE QUALITATIVA ---
-// Agora capturamos OS DETALHES das respostas, não só os números.
 const calculateScores = (answers, questions) => {
   const scores = { Foco: 0, Adaptabilidade: 0, Inovacao: 0, Coragem: 0, InteligenciaSocial: 0 };
   const counts = { ...scores };
-  
-  // Lista de comportamentos extremos para a IA usar na persuasão
   let extremeBehaviors = [];
 
   questions.forEach(q => {
     const val = answers[q.id] || 0;
-    let key = q.module === 'Inovação' ? 'Inovacao' : (q.module === 'InteligênciaSocial' ? 'InteligenciaSocial' : q.module);
-    
-    if (scores[key] !== undefined) { 
-      scores[key] += val; 
-      counts[key] += 1; 
-      
-      // Se o usuário foi extremo (1 ou 5), guardamos isso para "jogar na cara" dele depois
+    let key = q.module;
+     if (q.module === 'Inovação') key = 'Inovacao';
+     if (q.module === 'InteligênciaSocial') key = 'InteligenciaSocial';
+
+
+    if (scores[key] !== undefined) {
+      scores[key] += val;
+      counts[key] += 1;
+
       if (val === 1) {
         extremeBehaviors.push(`O usuário admite que NÃO consegue: "${q.text}"`);
       } else if (val === 5) {
@@ -72,8 +68,12 @@ const calculateScores = (answers, questions) => {
     }
   });
 
-  Object.keys(scores).forEach(k => { if (counts[k] > 0) scores[k] = Math.round((scores[k] / (counts[k] * 5)) * 100); });
-  
+  Object.keys(scores).forEach(k => {
+    if (counts[k] > 0) {
+      scores[k] = Math.round((scores[k] / (counts[k] * 5)) * 100);
+    }
+  });
+
   return { scores, extremeBehaviors };
 };
 
@@ -82,155 +82,152 @@ const calculateScores = (answers, questions) => {
 app.post('/api/quiz/submit', (req, res) => {
   try {
     const { answers, questions } = req.body;
-    if(!answers) return res.status(400).json({message: 'Dados inválidos'});
+    if (!answers || !questions) return res.status(400).json({ message: 'Dados inválidos' });
     const transactionId = uuidv4();
-    
-    // Calcula scores E comportamentos
     const { scores, extremeBehaviors } = calculateScores(answers, questions);
-    
-    transactions.set(transactionId, { 
-      answers, 
-      questions, 
-      scores, 
-      extremeBehaviors, // Salvamos isso para usar no prompt
-      status: 'PENDING', 
-      createdAt: new Date() 
+
+    transactions.set(transactionId, {
+      answers,
+      questions,
+      scores,
+      extremeBehaviors,
+      status: 'PENDING',
+      createdAt: new Date()
     });
     res.status(201).json({ transactionId });
-  } catch (e) { console.error(e); res.status(500).json({message: 'Erro interno'}); }
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ message: 'Erro interno' });
+  }
 });
 
-// --- PRÉVIA: GANCHO HIPER-PERSONALIZADO ---
 app.post('/api/report/preview', async (req, res) => {
-  try {
-    const { transactionId } = req.body;
-    const t = transactions.get(transactionId);
-    if (!t) return res.status(404).json({ message: "Sessão não encontrada" });
-    
-    if (!ai) return res.json({ previewText: "Seu perfil indica um potencial executivo alto, mas há uma trava emocional custando oportunidades." });
+    try {
+        const { transactionId } = req.body;
+        const t = transactions.get(transactionId);
+        if (!t) return res.status(404).json({ message: "Sessão não encontrada" });
 
-    // PROMPT ATUALIZADO: Usa as respostas específicas
-    const prompt = `
-      ATUE COMO: Especialista em Leitura Fria (Cold Reading) e Persuasão.
-      
-      DADOS DO USUÁRIO:
-      - Scores Gerais: ${JSON.stringify(t.scores)}
-      - CONFISSÕES DO USUÁRIO (Use isso para ser específico):
-      ${t.extremeBehaviors.slice(0, 5).join('\n')}
-      
-      SUA MISSÃO: Escrever um gancho de venda de 40 palavras.
-      
-      ESTRATÉGIA:
-      1. Pegue uma "Confissão" dele e valide (ex: "Você disse que odeia rotina...").
-      2. Conecte isso a um problema invisível (ex: "...isso explica sua instabilidade financeira").
-      3. Crie mistério.
-      4. NÃO USE MARKDOWN. Texto puro.
-      
-      Tom de voz: Dominante, Misterioso, Revelador.
-    `;
+        if (!ai) return res.json({ previewText: "Seu perfil indica um potencial executivo extremamente alto, mas há uma trava emocional custando oportunidades." });
 
-    const response = await ai.models.generateContent({ 
-      model: 'gemini-2.5-flash', 
-      contents: prompt,
-      config: { temperature: 0.7, maxOutputTokens: 150 } 
-    });
-    
-    let cleanText = response.text.trim().replace(/[*#]/g, '');
-    if (cleanText.startsWith('"') && cleanText.endsWith('"')) cleanText = cleanText.slice(1, -1);
+        const prompt = `
+            ATUE COMO: Especialista em Leitura Fria (Cold Reading) e Persuasão.
+            DADOS DO USUÁRIO:
+            - Scores Gerais: ${JSON.stringify(t.scores)}
+            - CONFISSÕES DO USUÁRIO (Use isso para ser específico): ${t.extremeBehaviors.slice(0, 5).join('\n')}
+            SUA MISSÃO: Escrever um gancho de venda de 40 palavras.
+            ESTRATÉGIA:
+            1. Pegue uma "Confissão" dele e valide (ex: "Você disse que odeia rotina...").
+            2. Conecte isso a um problema invisível (ex: "...isso explica sua instabilidade financeira").
+            3. Crie mistério.
+            4. NÃO USE MARKDOWN. Texto puro.
+            Tom de voz: Dominante, Misterioso, Revelador.
+        `;
 
-    res.json({ previewText: cleanText });
+        const response = await ai.models.generateContent({
+            model: 'gemini-2.5-flash',
+            contents: prompt,
+            config: { temperature: 0.7, maxOutputTokens: 150 }
+        });
+        
+        let cleanText = response.text.trim().replace(/[*#]/g, '');
+        if (cleanText.startsWith('"') && cleanText.endsWith('"')) {
+            cleanText = cleanText.slice(1, -1);
+        }
 
-  } catch (e) { console.error(e); res.status(500).json({message: 'Erro IA'}); }
+        res.json({ previewText: cleanText });
+    } catch (e) {
+        console.error(e);
+        res.status(500).json({ message: 'Erro IA' });
+    }
 });
 
-// --- RELATÓRIO FINAL: O DOSSIÊ COMPLETO ---
 app.get('/api/report/full/:transactionId', async (req, res) => {
   try {
     const { transactionId } = req.params;
     const t = transactions.get(transactionId);
     if (!t) return res.status(404).json({ message: "Não encontrado" });
-
     if (t.fullReport) return res.json(t.fullReport);
+    if (!ai) return res.status(503).json({ message: "IA indisponível" });
 
-    if (!ai) return res.json({ archetype: "Mock", summary: "Mock", dimensions: [], blindSpot: "Mock", actionPlan: [] });
-
-    // PROMPT MASSIVO PARA RELATÓRIO DETALHADO
+    // NOVO PROMPT ALINHADO COM types.ts
     const prompt = `
-      ATUE COMO: O Maior Mentor de Carreira e Psicólogo Comportamental do Mundo.
-      CLIENTE: Alguém buscando a verdade brutal para evoluir.
-      
-      DADOS TÉCNICOS:
-      - Scores: ${JSON.stringify(t.scores)}
-      - Comportamentos Específicos: ${JSON.stringify(t.extremeBehaviors)}
+      ATUE COMO: Um psicólogo organizacional e mentor de carreira de elite, especializado em análise comportamental DISC.
+      CLIENTE: Um profissional buscando um relatório profundo e acionável.
+      DADOS BRUTOS:
+      - Scores (0-100): ${JSON.stringify(t.scores)}
+      - Comportamentos Extremos (Confissões): ${JSON.stringify(t.extremeBehaviors)}
 
-      GERE UM JSON ESTRUTURADO E RICO (Sem Markdown, apenas JSON puro):
+      TAREFA: Gere um relatório ESTRUTURADO em JSON, sem markdown, seguindo o schema abaixo. Seja profundo, técnico e persuasivo.
+
+      SCHEMA JSON OBRIGATÓRIO:
       {
-        "archetype": "Crie um nome de Arquétipo Único e Poderoso (ex: O Construtor de Impérios, O Estrategista Cauteloso)",
-        "summary": "Escreva 3 parágrafos densos. Parágrafo 1: Valide quem ele é usando as respostas dele ('Você sente que...'). Parágrafo 2: Aponte a dor oculta que ele não admite. Parágrafo 3: A visão de quem ele pode se tornar.",
+        "archetype": "Crie um nome de Padrão Comportamental Único e poderoso. Ex: 'O Estrategista Resoluto', 'O Arquiteto de Pessoas'.",
+        "validation": {
+          "methodology": "Análise Comportamental (DISC)",
+          "reliabilityIndex": ${Math.floor(88 + Math.random() * 11)},
+          "confidentialityClause": "Este relatório é estritamente confidencial e gerado exclusivamente para o seu desenvolvimento pessoal e profissional."
+        },
+        "pattern": {
+          "name": "Use o mesmo nome do 'archetype'.",
+          "formula": "F:${t.scores.Foco} A:${t.scores.Adaptabilidade} I:${t.scores.Inovacao} C:${t.scores.Coragem} S:${t.scores.InteligenciaSocial}"
+        },
+        "summary": "Escreva um sumário executivo denso de 3 parágrafos. Parágrafo 1: Valide a identidade do usuário usando suas 'Confissões' e scores. Parágrafo 2: Aponte a dor oculta que ele não admite. Parágrafo 3: Pinte uma visão inspiradora do seu potencial máximo.",
+        "actionFilter": {
+          "speed": "${t.scores.Coragem > 60 ? 'Rápido' : 'Reflexivo'}",
+          "focus": "${t.scores.InteligenciaSocial > 55 ? 'Pessoas' : 'Tarefas'}",
+          "description": "Descreva como a combinação de velocidade e foco define o estilo de comunicação, decisão e resposta a conflitos do usuário."
+        },
+        "coreDrivers": {
+          "motivation": ["Liste 3 fatores intrínsecos que energizam este perfil."],
+          "friction": ["Liste 3 fatores que drenam a energia deste perfil."],
+          "idealEnvironment": "Descreva o ambiente de trabalho ideal que otimiza o desempenho, usando termos como 'Engenharia Comportamental'."
+        },
         "dimensions": [
-          { 
-            "name": "Foco", 
-            "score": ${t.scores.Foco}, 
-            "analysis": "Análise profunda de 3-4 frases. Explique o impacto disso na conta bancária e na felicidade dele." 
-          },
-          { 
-            "name": "Adaptabilidade", 
-            "score": ${t.scores.Adaptabilidade}, 
-            "analysis": "Análise profunda de 3-4 frases. Como ele lida com crises?" 
-          },
-          { 
-            "name": "Inovação", 
-            "score": ${t.scores.Inovacao}, 
-            "analysis": "Análise profunda de 3-4 frases. Ele cria ou apenas segue?" 
-          },
-          { 
-            "name": "Coragem", 
-            "score": ${t.scores.Coragem}, 
-            "analysis": "Análise profunda de 3-4 frases. O medo está travando ele?" 
-          },
-          { 
-            "name": "Inteligência Social", 
-            "score": ${t.scores.InteligenciaSocial}, 
-            "analysis": "Análise profunda de 3-4 frases. Ele lidera ou manipula?" 
-          }
+          {"name": "Foco", "score": ${t.scores.Foco}, "analysis": "Análise profunda de 3-4 frases sobre o impacto do nível de foco na produtividade e resultados financeiros."},
+          {"name": "Adaptabilidade", "score": ${t.scores.Adaptabilidade}, "analysis": "Análise profunda de 3-4 frases sobre como ele lida com crises e mudanças inesperadas."},
+          {"name": "Inovacao", "score": ${t.scores.Inovacao}, "analysis": "Análise profunda de 3-4 frases sobre a capacidade de criar ou otimizar."},
+          {"name": "Coragem", "score": ${t.scores.Coragem}, "analysis": "Análise profunda de 3-4 frases sobre a tolerância ao risco e a capacidade de tomar decisões difíceis."},
+          {"name": "InteligenciaSocial", "score": ${t.scores.InteligenciaSocial}, "analysis": "Análise profunda de 3-4 frases sobre como ele lidera, influencia ou manipula."}
         ],
-        "blindSpot": "O Ponto Cego Fatal. Uma frase longa e impactante que resume o maior defeito dele.",
+        "blindSpot": {
+          "title": "O Custo Oculto da sua Genialidade",
+          "description": "Baseado na pontuação mais baixa ou em uma 'Confissão' crítica, descreva o Ponto Cego Fatal. Uma frase longa e impactante que resume o maior risco comportamental dele."
+        },
         "actionPlan": [
-          "Passo 1: Uma ação prática e imediata para amanhã.",
-          "Passo 2: Uma mudança de hábito mental.",
-          "Passo 3: Um desafio de desconforto para evoluir.",
-          "Passo 4: Uma estratégia de longo prazo."
+          {"action": "Ação prática e imediata para amanhã.", "rationale": "O porquê técnico desta ação.", "expectedBenefit": "O Retorno Sobre o Investimento (ROI) comportamental esperado."},
+          {"action": "Uma mudança de hábito mental a ser cultivada.", "rationale": "O porquê técnico desta ação.", "expectedBenefit": "O Retorno Sobre o Investimento (ROI) comportamental esperado."},
+          {"action": "Um desafio de desconforto para evoluir.", "rationale": "O porquê técnico desta ação.", "expectedBenefit": "O Retorno Sobre o Investimento (ROI) comportamental esperado."},
+          {"action": "Uma estratégia de longo prazo.", "rationale": "O porquê técnico desta ação.", "expectedBenefit": "O Retorno Sobre o Investimento (ROI) comportamental esperado."}
         ]
       }
     `;
 
-    const response = await ai.models.generateContent({ 
-      model: 'gemini-2.5-flash', 
-      contents: prompt, 
-      config: { responseMimeType: 'application/json' } 
+    const response = await ai.models.generateContent({
+      model: 'gemini-2.5-flash',
+      contents: prompt,
+      config: { responseMimeType: 'application/json' }
     });
-    
+
     const data = JSON.parse(response.text);
     t.fullReport = data;
     res.json(data);
-
-  } catch (e) { console.error(e); res.status(500).json({message: 'Erro IA'}); }
+  } catch (e) {
+    console.error("Erro ao gerar relatório completo:", e);
+    res.status(500).json({ message: 'Erro IA' });
+  }
 });
 
-// WEBHOOKS E ROTAS PADRÃO
+// --- WEBHOOKS E ROTAS PADRÃO ---
 app.post('/api/kiwify-webhook', (req, res) => {
   const d = req.body;
   const tid = d.aff_content || (d.order && d.order.src);
-  if (tid && transactions.has(tid) && d.order_status === 'paid') transactions.get(tid).status = 'PAID';
+  if (tid && transactions.has(tid) && d.order_status === 'paid') {
+    transactions.get(tid).status = 'PAID';
+  }
   res.send('OK');
 });
 
-app.get('/api/simulate-pay/:id', (req, res) => {
-  const { id } = req.params;
-  if (transactions.has(id)) { transactions.get(id).status = 'PAID'; res.send('Pago'); } 
-  else res.status(404).send('404');
-});
-
+// Rota de fallback para servir o index.html do React
 app.get('*', (req, res) => {
   if (clientDistPath) {
     res.sendFile(path.join(clientDistPath, 'index.html'));
