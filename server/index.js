@@ -48,29 +48,29 @@ const transactions = new Map();
 
 // --- LÓGICA DE ANÁLISE QUALITATIVA ---
 const calculateScores = (answers, questions) => {
-    if (!answers || typeof answers !== 'object' || !questions || !Array.isArray(questions)) {
-        throw new Error("Dados de entrada inválidos para calculateScores.");
+  if (!answers || typeof answers !== 'object' || !questions || !Array.isArray(questions)) {
+    throw new Error("Dados de entrada inválidos para calculateScores.");
+  }
+  const scores = { Foco: 0, Adaptabilidade: 0, Inovacao: 0, Coragem: 0, InteligenciaSocial: 0 };
+  const counts = { ...scores };
+  const extremeBehaviors = [];
+  for (const q of questions) {
+    if (!q || !q.module || scores[q.module] === undefined) continue;
+    const key = q.module;
+    const val = answers[q.id];
+    if (typeof val === 'number' && val >= 1 && val <= 5) {
+      scores[key] += val;
+      counts[key] += 1;
+      if (val === 1) extremeBehaviors.push(q.text);
+      else if (val === 5) extremeBehaviors.push(q.text);
     }
-    const scores = { Foco: 0, Adaptabilidade: 0, Inovacao: 0, Coragem: 0, InteligenciaSocial: 0 };
-    const counts = { ...scores };
-    const extremeBehaviors = [];
-    for (const q of questions) {
-        if (!q || !q.module || scores[q.module] === undefined) continue;
-        const key = q.module;
-        const val = answers[q.id];
-        if (typeof val === 'number' && val >= 1 && val <= 5) {
-            scores[key] += val;
-            counts[key] += 1;
-            if (val === 1) extremeBehaviors.push(q.text);
-            else if (val === 5) extremeBehaviors.push(q.text);
-        }
+  }
+  for (const key in scores) {
+    if (counts[key] > 0) {
+      scores[key] = Math.round((scores[key] / (counts[key] * 5)) * 100);
     }
-    for (const key in scores) {
-        if (counts[key] > 0) {
-            scores[key] = Math.round((scores[key] / (counts[key] * 5)) * 100);
-        }
-    }
-    return { scores, extremeBehaviors };
+  }
+  return { scores, extremeBehaviors };
 };
 
 // --- ROTAS DA API ---
@@ -98,35 +98,40 @@ app.post('/api/report/preview', async (req, res) => {
         return res.status(503).json({ message: "Serviço de IA indisponível." });
     }
 
+    // LÓGICA INTELIGENTE PARA O PROMPT
+    let strategyPrompt;
+    if (t.extremeBehaviors.length > 0) {
+        // Estratégia A: Usa uma confissão real
+        strategyPrompt = `2. CONECTE UMA OBSERVAÇÃO: Aponte que o comportamento do usuário em relação a '${t.extremeBehaviors[0]}' se alinha com seu score mais baixo. Descreva isso como uma 'área de alavancagem' chave para seu crescimento.`;
+    } else {
+        // Estratégia B: Usa a pontuação mais baixa se não houver confissões
+        const lowestScore = Object.entries(t.scores).sort((a, b) => a[1] - b[1])[0];
+        strategyPrompt = `2. DESTAQUE UMA OPORTUNIDADE: Aponte que seu score de ${lowestScore[1]} em '${lowestScore[0]}' representa a maior oportunidade de otimização em seu perfil, com impacto direto em seus resultados.`;
+    }
+
     const prompt = `
-        ATUE COMO: Um psicólogo organizacional de elite, finalizando um Dossiê Comportamental.
-        SUA MISSÃO: Escrever uma nota de capa (40-50 palavras) para o cliente. A nota deve ser um gancho de venda poderoso, dando uma amostra real e específica do relatório, criando urgência para a leitura completa.
-        DADOS DO CLIENTE:
-        - Scores: ${JSON.stringify(t.scores)}
-        - Confissões (respostas extremas onde o usuário marcou 'Discordo Totalmente' ou 'Concordo Totalmente'): ${JSON.stringify(t.extremeBehaviors.slice(0, 3))}
+        ATUE COMO: Um mentor de carreira de elite, escrevendo uma nota de capa para um dossiê executivo.
+        SUA MISSÃO: Escrever um insight de 40-50 palavras. O texto deve ser intrigante e mostrar que a análise é personalizada, criando o desejo de ler o relatório completo.
+
         ESTRATÉGIA:
-        1. Inicie validando o perfil: "Após analisar suas respostas, um padrão se destacou..."
-        2. Cite DIRETAMENTE uma das 'Confissões' e conecte-a ao score MAIS BAIXO. Ex: "Sua dificuldade em '${t.extremeBehaviors[0]}', por exemplo, está ligada ao seu score em [Dimensão], e isso tem um custo financeiro que você talvez não perceba."
-        3. Crie mistério sobre a solução no relatório. Ex: "No dossiê, detalhamos o 'Protocolo de Refatoração' para reverter exatamente isso."
-        4. Tom de voz: Clínico, direto, revelador. Não use markdown ou aspas.
+        1. Inicie com uma validação: "Sua análise revelou um padrão comportamental claro..."
+        ${strategyPrompt}
+        3. CRIE CURIOSIDADE: Mencione que o dossiê contém o "Protocolo de Otimização de Performance" para transformar essa área de alavancagem em uma força.
+        4. TOM DE VOZ: Estratégico, perspicaz, encorajador. Não use markdown ou aspas.
     `;
-    const response = await ai.models.generateContent({ model: 'gemini-2.5-flash', contents: prompt, config: { temperature: 0.75, maxOutputTokens: 150 } });
-
-    // **CORREÇÃO DEFINITIVA**
-    const generatedText = response.text;
-
-    if (!generatedText) {
-        console.error("Resposta da IA vazia, possível bloqueio por filtro de segurança. Resposta completa:", JSON.stringify(response, null, 2));
+    const response = await ai.models.generateContent({ model: 'gemini-2.5-flash', contents: prompt, config: { temperature: 0.75 } });
+    
+    if (!response.text) {
         throw new Error("A IA não retornou uma resposta, possivelmente devido a filtros de segurança do Google.");
     }
     
-    res.json({ previewText: generatedText.trim() });
-
+    res.json({ previewText: response.text.trim() });
   } catch (e) {
     console.error("Erro detalhado na geração da prévia:", e);
     res.status(500).json({ message: `Erro na IA. Causa: ${e.message}` });
   }
 });
+
 
 app.get('/api/report/full/:transactionId', async (req, res) => {
   try {
@@ -142,14 +147,7 @@ app.get('/api/report/full/:transactionId', async (req, res) => {
       SCHEMA JSON OBRIGATÓRIO: { "archetype": "Crie um nome de Padrão Comportamental Único e poderoso. Ex: 'O Estrategista Resoluto', 'O Arquiteto de Pessoas'.", "validation": { "methodology": "Análise Comportamental (DISC)", "reliabilityIndex": ${Math.floor(88 + Math.random() * 11)}, "confidentialityClause": "Este relatório é estritamente confidencial e gerado exclusivamente para o seu desenvolvimento pessoal e profissional." }, "pattern": { "name": "Use o mesmo nome do 'archetype'.", "formula": "F:${t.scores.Foco} A:${t.scores.Adaptabilidade} I:${t.scores.Inovacao} C:${t.scores.Coragem} S:${t.scores.InteligenciaSocial}" }, "summary": "Escreva um sumário executivo denso de 3 parágrafos. Parágrafo 1: Valide a identidade do usuário usando suas 'Confissões' e scores. Parágrafo 2: Aponte a dor oculta que ele não admite. Parágrafo 3: Pinte uma visão inspiradora do seu potencial máximo.", "actionFilter": { "speed": "${t.scores.Coragem > 60 ? 'Rápido' : 'Reflexivo'}", "focus": "${t.scores.InteligenciaSocial > 55 ? 'Pessoas' : 'Tarefas'}", "description": "Descreva como a combinação de velocidade e foco define o estilo de comunicação, decisão e resposta a conflitos do usuário." }, "coreDrivers": { "motivation": ["Liste 3 fatores intrínsecos que energizam este perfil."], "friction": ["Liste 3 fatores que drenam a energia deste perfil."], "idealEnvironment": "Descreva o ambiente de trabalho ideal que otimiza o desempenho, usando termos como 'Engenharia Comportamental'." }, "dimensions": [ {"name": "Foco", "score": ${t.scores.Foco}, "analysis": "Análise profunda de 3-4 frases sobre o impacto do nível de foco na produtividade e resultados financeiros."}, {"name": "Adaptabilidade", "score": ${t.scores.Adaptabilidade}, "analysis": "Análise profunda de 3-4 frases sobre como ele lida com crises e mudanças inesperadas."}, {"name": "Inovacao", "score": ${t.scores.Inovacao}, "analysis": "Análise profunda de 3-4 frases sobre a capacidade de criar ou otimizar."}, {"name": "Coragem", "score": ${t.scores.Coragem}, "analysis": "Análise profunda de 3-4 frases sobre a tolerância ao risco e a capacidade de tomar decisões difíceis."}, {"name": "InteligenciaSocial", "score": ${t.scores.InteligenciaSocial}, "analysis": "Análise profunda de 3-4 frases sobre como ele lidera, influencia ou manipula."} ], "blindSpot": { "title": "O Custo Oculto da sua Genialidade", "description": "Baseado na pontuação mais baixa ou em uma 'Confissão' crítica, descreva o Ponto Cego Fatal. Uma frase longa e impactante que resume o maior risco comportamental dele." }, "actionPlan": [ {"action": "Ação prática e imediata para amanhã.", "rationale": "O porquê técnico desta ação.", "expectedBenefit": "O Retorno Sobre o Investimento (ROI) comportamental esperado."}, {"action": "Uma mudança de hábito mental a ser cultivada.", "rationale": "O porquê técnico desta ação.", "expectedBenefit": "O Retorno Sobre o Investimento (ROI) comportamental esperado."}, {"action": "Um desafio de desconforto para evoluir.", "rationale": "O porquê técnico desta ação.", "expectedBenefit": "O Retorno Sobre o Investimento (ROI) comportamental esperado."}, {"action": "Uma estratégia de longo prazo.", "rationale": "O porquê técnico desta ação.", "expectedBenefit": "O Retorno Sobre o Investimento (ROI) comportamental esperado."} ] }
     `;
     const response = await ai.models.generateContent({ model: 'gemini-2.5-flash', contents: prompt, config: { responseMimeType: 'application/json' } });
-
-    // **VERIFICAÇÃO DE SEGURANÇA ADICIONAL**
-    const reportText = response.text;
-    if (!reportText) {
-        throw new Error("A IA não retornou um relatório completo, possivelmente devido a filtros de segurança.");
-    }
-
-    const data = JSON.parse(reportText);
+    const data = JSON.parse(response.text);
     t.fullReport = data;
     res.json(data);
   } catch (e) {
