@@ -1,5 +1,4 @@
-import React, 'react';
-import { useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { fetchReportPreview } from '../services/apiService';
 import { Button } from '../components/ui/Button';
 import { Card, CardContent } from '../components/ui/Card';
