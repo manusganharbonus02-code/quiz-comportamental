@@ -61,9 +61,9 @@ const calculateScores = (answers, questions) => {
       counts[key] += 1;
 
       if (val === 1) {
-        extremeBehaviors.push(`O usuário admite que NÃO consegue: "${q.text}"`);
+        extremeBehaviors.push(`que não consegue: "${q.text}"`);
       } else if (val === 5) {
-        extremeBehaviors.push(`O usuário afirma com certeza que: "${q.text}"`);
+        extremeBehaviors.push(`que afirma com certeza: "${q.text}"`);
       }
     }
   });
@@ -107,20 +107,22 @@ app.post('/api/report/preview', async (req, res) => {
         const t = transactions.get(transactionId);
         if (!t) return res.status(404).json({ message: "Sessão não encontrada" });
 
-        if (!ai) return res.json({ previewText: "Seu perfil indica um potencial executivo extremamente alto, mas há uma trava emocional custando oportunidades." });
+        if (!ai) return res.json({ previewText: "Seu perfil indica um potencial executivo extremamente alto, mas existe uma barreira invisível em sua tomada de decisão que está custando oportunidades financeiras." });
 
+        // PROMPT ATUALIZADO E PERSUASIVO
         const prompt = `
-            ATUE COMO: Especialista em Leitura Fria (Cold Reading) e Persuasão.
-            DADOS DO USUÁRIO:
-            - Scores Gerais: ${JSON.stringify(t.scores)}
-            - CONFISSÕES DO USUÁRIO (Use isso para ser específico): ${t.extremeBehaviors.slice(0, 5).join('\n')}
-            SUA MISSÃO: Escrever um gancho de venda de 40 palavras.
+            ATUE COMO: Um psicólogo organizacional de elite, finalizando um Dossiê Comportamental.
+            SUA MISSÃO: Escrever uma nota de capa (40-50 palavras) para o cliente. A nota deve ser um gancho de venda poderoso, dando uma amostra real e específica do relatório, criando urgência para a leitura completa.
+
+            DADOS DO CLIENTE:
+            - Scores: ${JSON.stringify(t.scores)}
+            - Confissões (respostas extremas): ${JSON.stringify(t.extremeBehaviors)}
+
             ESTRATÉGIA:
-            1. Pegue uma "Confissão" dele e valide (ex: "Você disse que odeia rotina...").
-            2. Conecte isso a um problema invisível (ex: "...isso explica sua instabilidade financeira").
-            3. Crie mistério.
-            4. NÃO USE MARKDOWN. Texto puro.
-            Tom de voz: Dominante, Misterioso, Revelador.
+            1. Inicie com uma validação forte. Ex: "Após analisar suas respostas, um padrão se destacou..."
+            2. Cite DIRETAMENTE uma das 'Confissões' do usuário e conecte-a ao seu score MAIS BAIXO. Ex: "Sua admissão de que '[Confissão]' está diretamente ligada ao seu score de X em [Dimensão], e isso tem um custo financeiro que talvez você não tenha calculado."
+            3. Crie um mistério sobre a solução que está no relatório completo. Ex: "No dossiê, detalhamos o 'Protocolo de Refatoração Comportamental' para reverter exatamente isso."
+            4. Tom de voz: Clínico, direto, revelador e levemente provocador. Não use markdown.
         `;
 
         const response = await ai.models.generateContent({
@@ -129,15 +131,12 @@ app.post('/api/report/preview', async (req, res) => {
             config: { temperature: 0.7, maxOutputTokens: 150 }
         });
         
-        let cleanText = response.text.trim().replace(/[*#]/g, '');
-        if (cleanText.startsWith('"') && cleanText.endsWith('"')) {
-            cleanText = cleanText.slice(1, -1);
-        }
+        let cleanText = response.text.trim().replace(/[*#"]/g, '');
 
         res.json({ previewText: cleanText });
     } catch (e) {
-        console.error(e);
-        res.status(500).json({ message: 'Erro IA' });
+        console.error("Erro na geração da prévia:", e);
+        res.status(500).json({ message: 'Erro na IA ao gerar prévia' });
     }
 });
 
@@ -149,7 +148,6 @@ app.get('/api/report/full/:transactionId', async (req, res) => {
     if (t.fullReport) return res.json(t.fullReport);
     if (!ai) return res.status(503).json({ message: "IA indisponível" });
 
-    // NOVO PROMPT ALINHADO COM types.ts
     const prompt = `
       ATUE COMO: Um psicólogo organizacional e mentor de carreira de elite, especializado em análise comportamental DISC.
       CLIENTE: Um profissional buscando um relatório profundo e acionável.
