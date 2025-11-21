@@ -7,7 +7,7 @@ import { Radar } from 'react-chartjs-2';
 import { Chart as ChartJS, RadialLinearScale, PointElement, LineElement, Filler, Tooltip, Legend } from 'chart.js';
 import {
   BrainCircuit, ShieldCheck, Binary, SlidersHorizontal, Sparkles, Flame, EyeOff, CheckSquare,
-  TrendingUp, Lock, Download, LogOut, AlertOctagon, AlertTriangle
+  TrendingUp, Lock, Download, LogOut, AlertOctagon, AlertTriangle, Library
 } from 'lucide-react';
 
 ChartJS.register(RadialLinearScale, PointElement, LineElement, Filler, Tooltip, Legend);
@@ -179,15 +179,34 @@ export const ReportFull: React.FC<ReportFullProps> = ({ transactionId, onRestart
                     </ul>
                 </Card>
            </div>
+           
+           {/* NOVA SEÇÃO: ANÁLISE 360 DE SUBFATORES */}
+           {report.subFactors && (
+             <div>
+                <div className="text-center mb-8">
+                  <h2 className="text-3xl font-bold text-white">Análise 360° de Subfatores</h2>
+                  <p className="text-slate-400 mt-2">Como seus traços se manifestam em situações específicas.</p>
+                </div>
+                <div className="grid md:grid-cols-3 gap-6">
+                    {report.subFactors.map(sub => (
+                        <Card key={sub.name} className="p-6">
+                           <h3 className="font-bold text-white mb-3 flex items-center gap-2"><Library className="text-purple-400 w-5 h-5"/> {sub.name}</h3>
+                           <p className="text-slate-300 text-sm">{sub.analysis}</p>
+                        </Card>
+                    ))}
+                </div>
+             </div>
+           )}
+
         </section>
 
         {/* FASE 3: Aplicação Estratégica */}
         <section className="space-y-12">
-            <Card className="bg-gradient-to-r from-red-900/20 to-slate-900 border border-red-800/50 p-8 flex gap-6 items-center">
-                <div className="bg-red-500/10 p-4 rounded-full">
+            <Card className="bg-gradient-to-r from-red-900/20 to-slate-900 border border-red-800/50 p-8 flex flex-col md:flex-row gap-6 items-center">
+                <div className="bg-red-500/10 p-4 rounded-full flex-shrink-0">
                     <EyeOff className="text-red-400 w-10 h-10" />
                 </div>
-                <div>
+                <div className="text-center md:text-left">
                     <h2 className="text-xl font-bold text-white uppercase tracking-wider">{report.blindSpot.title}</h2>
                     <p className="text-red-200/90 text-lg mt-1 italic">"{report.blindSpot.description}"</p>
                 </div>
@@ -202,7 +221,7 @@ export const ReportFull: React.FC<ReportFullProps> = ({ transactionId, onRestart
                     <Card key={idx} className="p-6 border-l-4 border-green-500 bg-slate-900/50">
                         <h3 className="font-bold text-lg text-white mb-3 flex items-center gap-3"><CheckSquare className="text-green-400 w-6 h-6"/> {plan.action}</h3>
                         <p className="text-sm text-slate-400 mb-2"><span className="font-bold text-slate-300">Racional:</span> {plan.rationale}</p>
-                        <p className="text-sm text-green-300/80"><span className="font-bold text-green-300">Benefício:</span> {plan.expectedBenefit}</p>
+                        <p className="text-sm text-green-300/80"><span className="font-bold text-green-300">Benefício (ROI):</span> {plan.expectedBenefit}</p>
                     </Card>
                 ))}
             </div>
