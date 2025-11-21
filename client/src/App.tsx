@@ -4,13 +4,11 @@ import { Quiz } from './pages/Quiz';
 import { ReportPreview } from './pages/ReportPreview';
 import { Waiting } from './pages/Waiting';
 import { ReportFull } from './pages/ReportFull';
-import { Answers } from './types'; // quizContext não é mais necessário aqui
 
 const KIWIFY_BASE_URL = 'https://pay.kiwify.com.br/RHpnrVL';
 
 type AppState = 'home' | 'quiz' | 'preview' | 'waiting' | 'full_report';
 
-// A função dev mode foi removida pois não é mais necessária para o fluxo principal
 function App() {
   const [view, setView] = useState<AppState>('home');
   const [transactionId, setTransactionId] = useState<string | null>(null);
@@ -69,7 +67,7 @@ function App() {
       
       {view === 'quiz' && <Quiz onComplete={handleQuizComplete} />}
       
-      {/* CORREÇÃO: A verificação '&& quizContext' foi removida. */}
+      {/* CORREÇÃO CRÍTICA: A verificação '&& quizContext' foi removida. */}
       {view === 'preview' && transactionId && (
         <ReportPreview 
           transactionId={transactionId} 
@@ -85,7 +83,7 @@ function App() {
         />
       )}
       
-      {/* CORREÇÃO: A verificação '&& quizContext' foi removida. */}
+      {/* CORREÇÃO CRÍTICA: A verificação '&& quizContext' foi removida. */}
       {view === 'full_report' && transactionId && (
         <ReportFull 
           transactionId={transactionId} 
