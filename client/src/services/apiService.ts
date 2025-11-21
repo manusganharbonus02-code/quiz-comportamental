@@ -41,9 +41,8 @@ export const fetchReportPreview = async (quizData: QuizData): Promise<{ previewT
     const response = await fetch(`${API_BASE_URL}/report/preview`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(quizData), // Envia os dados completos
+      body: JSON.stringify(quizData), 
     });
-
     if (!response.ok) {
       const errorBody = await response.json().catch(() => ({ message: 'Erro desconhecido ao gerar prévia.' }));
       throw new Error(errorBody.message);
@@ -54,10 +53,31 @@ export const fetchReportPreview = async (quizData: QuizData): Promise<{ previewT
   }
 };
 
-// 3. Envia os dados do quiz para gerar o relatório COMPLETO
+// 3. NOVA FUNÇÃO para verificar o status do pagamento
+export const checkPaymentStatus = async (transactionId: string): Promise<string> => {
+    try {
+        const response = await fetch(`${API_BASE_URL}/payment-status/${transactionId}`);
+        if (!response.ok) {
+            // Se a transação não for encontrada, o servidor retorna 404.
+            // Isso é esperado até que o webhook chegue ou o servidor reinicie.
+            if (response.status === 404) {
+                return 'PENDING';
+            }
+            throw new Error('Falha ao verificar o status do pagamento.');
+        }
+        const data = await response.json();
+        return data.status; // Ex: 'PENDING' ou 'PAID'
+    } catch(error) {
+        console.error("Error in checkPaymentStatus:", error);
+        throw error;
+    }
+};
+
+
+// 4. Envia os dados do quiz para gerar o relatório COMPLETO
 export const generateFullReport = async (quizData: QuizData): Promise<FullReportData> => {
   try {
-    const response = await fetch(`${API_BASE_URL}/report/generate`, { // Novo endpoint
+    const response = await fetch(`${API_BASE_URL}/report/generate`, { 
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(quizData),
