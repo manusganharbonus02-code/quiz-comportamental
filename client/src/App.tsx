@@ -3,46 +3,70 @@ import { Home } from './pages/Home';
 import { Quiz } from './pages/Quiz';
 import { ReportPreview } from './pages/ReportPreview';
 import { ReportFull } from './pages/ReportFull';
+import { ALL_QUESTIONS } from './constants';
+import { Answers } from './types';
 
-// URL for the product checkout page on Kiwify
 const KIWIFY_BASE_URL = 'https://pay.kiwify.com.br/RHpnrVL';
+const QUIZ_CONTEXT_EXPIRATION_MS = 2 * 60 * 1000; // 2 minutos em milissegundos
 
 type AppState = 'home' | 'quiz' | 'preview' | 'full_report';
 
 function App() {
   const [view, setView] = useState<AppState>('home');
   const [transactionId, setTransactionId] = useState<string | null>(null);
+  const [quizContext, setQuizContext] = useState(null);
 
-  // This effect runs only once on component mount to check for a transaction ID in the URL
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const urlTid = params.get('tid') || params.get('transactionId') || params.get('aff_content');
 
     if (urlTid) {
-      console.log("[APP] Transaction ID detected in URL:", urlTid);
-      setTransactionId(urlTid);
-      setView('full_report');
+      console.log("[APP] ID detected in URL:", urlTid);
+      const savedItem = localStorage.getItem(`quiz_context_${urlTid}`);
+      
+      if (savedItem) {
+        const { data, timestamp } = JSON.parse(savedItem);
+        const isExpired = (Date.now() - timestamp) > QUIZ_CONTEXT_EXPIRATION_MS;
 
-      // Clean up the URL for a cleaner user experience, without reloading the page
+        if (!isExpired) {
+          console.log("[APP] Valid quiz context found in localStorage.");
+          setQuizContext(data);
+          setTransactionId(urlTid);
+          setView('full_report');
+        } else {
+          console.warn("[APP] Expired quiz context found. Cleaning up and resetting.");
+          localStorage.removeItem(`quiz_context_${urlTid}`);
+          setView('home');
+        }
+      } else {
+        console.warn("[APP] No quiz context found for this transaction ID. Resetting.");
+        setView('home');
+      }
       window.history.replaceState({}, document.title, window.location.pathname);
     }
   }, []);
 
   const handleStartQuiz = () => {
-    // Ensure a clean state before starting a new quiz
     setTransactionId(null);
-    localStorage.removeItem('apex_transaction_id');
     setView('quiz');
   };
 
-  const handleQuizComplete = (tid: string) => {
-    console.log("Quiz completed. Transaction ID:", tid);
+  const handleQuizComplete = (tid: string, answers: Answers) => {
+    console.log("Quiz finished. ID:", tid);
+    const context = { questions: ALL_QUESTIONS, answers };
+    
+    // Salva o contexto com um carimbo de tempo
+    const contextWrapper = {
+      data: context,
+      timestamp: Date.now()
+    };
+    localStorage.setItem(`quiz_context_${tid}`, JSON.stringify(contextWrapper));
+    
     setTransactionId(tid);
-    // Temporarily save the ID to localStorage to survive the redirect to checkout
-    localStorage.setItem('apex_transaction_id', tid);
+    setQuizContext(context); // Guarda o contexto para a prévia
     setView('preview');
   };
-  
+
   const handleUnlockReport = () => {
     if (transactionId) {
       const checkoutUrl = `${KIWIFY_BASE_URL}?aff_content=${transactionId}`;
@@ -50,43 +74,32 @@ function App() {
     }
   };
 
-  // Resets the entire application state to the beginning
   const handleReset = () => {
-    localStorage.removeItem('apex_transaction_id');
-    setTransactionId(null);
-    // Also clear any URL parameters just in case
-    window.history.replaceState({}, document.title, window.location.pathname);
-    setView('home');
-  };
-
-  const renderCurrentView = () => {
-    switch (view) {
-      case 'home':
-        return <Home onStart={handleStartQuiz} />;
-      case 'quiz':
-        return <Quiz onComplete={handleQuizComplete} />;
-      case 'preview':
-        if (transactionId) {
-          return <ReportPreview transactionId={transactionId} onUnlock={handleUnlockReport} />;
-        }
-        // Fallback if transactionId is missing
-        handleReset(); 
-        return null;
-      case 'full_report':
-        if (transactionId) {
-          return <ReportFull transactionId={transactionId} onRestart={handleReset} />;
-        }
-        // Fallback if transactionId is missing
-        handleReset();
-        return null;
-      default:
-        return <Home onStart={handleStartQuiz} />;
+    if (transactionId) {
+      localStorage.removeItem(`quiz_context_${transactionId}`);
     }
+    setTransactionId(null);
+    setView('home');
   };
 
   return (
     <div className="bg-slate-950 text-slate-100 min-h-screen font-sans selection:bg-amber-500/30 selection:text-amber-900">
-      {renderCurrentView()}
+      {view === 'home' && <Home onStart={handleStartQuiz} />}
+      {view === 'quiz' && <Quiz onComplete={handleQuizComplete} />}
+      {view === 'preview' && transactionId && quizContext && (
+        <ReportPreview
+          transactionId={transactionId}
+          quizContext={quizContext} // Passa o contexto para a prévia
+          onUnlock={handleUnlockReport}
+        />
+      )}
+      {view === 'full_report' && transactionId && quizContext && (
+        <ReportFull
+          transactionId={transactionId}
+          quizContext={quizContext}
+          onRestart={handleReset}
+        />
+      )}
     </div>
   );
 }
