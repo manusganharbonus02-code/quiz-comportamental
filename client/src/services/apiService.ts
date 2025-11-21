@@ -16,6 +16,7 @@ const API_BASE_URL = isProduction
 
 console.log(`[API SERVICE] Connecting to: ${API_BASE_URL} (Prod: ${isProduction})`);
 
+// 1. Envia os dados do quiz para o servidor e obtém um ID de transação.
 export const startCheckout = async (quizData: QuizData): Promise<TransactionResponse> => {
   try {
     const response = await fetch(`${API_BASE_URL}/quiz/submit`, {
@@ -34,6 +35,7 @@ export const startCheckout = async (quizData: QuizData): Promise<TransactionResp
   }
 };
 
+// 2. Busca a prévia do relatório usando o ID da transação.
 export const fetchReportPreview = async (transactionId: string): Promise<{ previewText: string }> => {
   try {
     const response = await fetch(`${API_BASE_URL}/report/preview/${transactionId}`);
@@ -47,21 +49,26 @@ export const fetchReportPreview = async (transactionId: string): Promise<{ previ
   }
 };
 
+// 3. Verifica o status do pagamento usando o ID da transação.
 export const checkPaymentStatus = async (transactionId: string): Promise<string> => {
     try {
         const response = await fetch(`${API_BASE_URL}/payment-status/${transactionId}`);
         if (!response.ok) {
-            if (response.status === 404) return 'PENDING';
+            // Se o servidor não encontrar a transação (pode ter reiniciado), tratamos como pendente.
+            if (response.status === 404) {
+                return 'PENDING';
+            }
             throw new Error('Falha ao verificar o status do pagamento.');
         }
         const data = await response.json();
-        return data.status;
+        return data.status; // Retorna 'PENDING' ou 'PAID'
     } catch(error) {
         console.error("Error in checkPaymentStatus:", error);
         throw error;
     }
 };
 
+// 4. Busca o relatório completo usando o ID da transação.
 export const fetchFullReport = async (transactionId: string): Promise<FullReportData> => {
   try {
     const response = await fetch(`${API_BASE_URL}/report/full/${transactionId}`);
