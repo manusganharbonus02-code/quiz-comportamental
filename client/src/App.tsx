@@ -4,6 +4,7 @@ import { Quiz } from './pages/Quiz';
 import { ReportPreview } from './pages/ReportPreview';
 import { Waiting } from './pages/Waiting';
 import { ReportFull } from './pages/ReportFull';
+import { Answers } from './types';
 
 const KIWIFY_BASE_URL = 'https://pay.kiwify.com.br/RHpnrVL';
 
@@ -30,7 +31,6 @@ function App() {
     setView('quiz');
   };
 
-  // A função agora só precisa do TID, como planejado na arquitetura final.
   const handleQuizComplete = (tid: string) => {
     console.log("Quiz finalizado. ID:", tid);
     setTransactionId(tid);
@@ -56,7 +56,8 @@ function App() {
 
   const getCheckoutUrl = () => {
       if (!transactionId) return '#';
-      // A URL de redirecionamento agora aponta para a tela de espera, que sabe como lidar com o TID.
+      // A URL de redirecionamento agora aponta de volta para o site com o TID,
+      // permitindo que o useEffect acima retome o fluxo.
       const redirectUrl = `${window.location.origin}/?tid=${transactionId}`;
       return `${KIWIFY_BASE_URL}?aff_content=${transactionId}&redirect_url=${encodeURIComponent(redirectUrl)}`;
   }
@@ -67,7 +68,6 @@ function App() {
       
       {view === 'quiz' && <Quiz onComplete={handleQuizComplete} />}
       
-      {/* CORREÇÃO CRÍTICA: A verificação '&& quizContext' foi removida. */}
       {view === 'preview' && transactionId && (
         <ReportPreview 
           transactionId={transactionId} 
@@ -83,7 +83,6 @@ function App() {
         />
       )}
       
-      {/* CORREÇÃO CRÍTICA: A verificação '&& quizContext' foi removida. */}
       {view === 'full_report' && transactionId && (
         <ReportFull 
           transactionId={transactionId} 
