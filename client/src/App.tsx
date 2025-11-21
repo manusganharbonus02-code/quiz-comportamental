@@ -7,7 +7,8 @@ import { ALL_QUESTIONS } from './constants';
 import { Answers } from './types';
 
 const KIWIFY_BASE_URL = 'https://pay.kiwify.com.br/RHpnrVL';
-const QUIZ_CONTEXT_EXPIRATION_MS = 2 * 60 * 1000; // 2 minutos em milissegundos
+// AUMENTADO: O tempo de expiração agora é de 15 minutos, mais realista para um fluxo de pagamento.
+const QUIZ_CONTEXT_EXPIRATION_MS = 15 * 60 * 1000; 
 
 type AppState = 'home' | 'quiz' | 'preview' | 'full_report';
 
@@ -21,25 +22,28 @@ function App() {
     const urlTid = params.get('tid') || params.get('transactionId') || params.get('aff_content');
 
     if (urlTid) {
-      console.log("[APP] ID detected in URL:", urlTid);
+      console.log("[APP] ID detectado na URL:", urlTid);
       const savedItem = localStorage.getItem(`quiz_context_${urlTid}`);
       
       if (savedItem) {
         const { data, timestamp } = JSON.parse(savedItem);
-        const isExpired = (Date.now() - timestamp) > QUIZ_CONTEXT_EXPIRATION_MS;
+        const elapsedTime = Date.now() - timestamp;
+        const isExpired = elapsedTime > QUIZ_CONTEXT_EXPIRATION_MS;
+
+        console.log(`[APP] Contexto encontrado. Tempo decorrido: ${Math.round(elapsedTime / 1000)}s.`);
 
         if (!isExpired) {
-          console.log("[APP] Valid quiz context found in localStorage.");
+          console.log("[APP] Contexto válido. Carregando relatório completo...");
           setQuizContext(data);
           setTransactionId(urlTid);
           setView('full_report');
         } else {
-          console.warn("[APP] Expired quiz context found. Cleaning up and resetting.");
+          console.warn("[APP] CONTEXTO EXPIRADO. O usuário demorou demais para pagar. Limpando e reiniciando.");
           localStorage.removeItem(`quiz_context_${urlTid}`);
           setView('home');
         }
       } else {
-        console.warn("[APP] No quiz context found for this transaction ID. Resetting.");
+        console.warn("[APP] NENHUM CONTEXTO SALVO encontrado para este ID. Reiniciando.");
         setView('home');
       }
       window.history.replaceState({}, document.title, window.location.pathname);
@@ -52,18 +56,18 @@ function App() {
   };
 
   const handleQuizComplete = (tid: string, answers: Answers) => {
-    console.log("Quiz finished. ID:", tid);
+    console.log("Quiz finalizado. ID:", tid);
     const context = { questions: ALL_QUESTIONS, answers };
     
-    // Salva o contexto com um carimbo de tempo
     const contextWrapper = {
       data: context,
       timestamp: Date.now()
     };
     localStorage.setItem(`quiz_context_${tid}`, JSON.stringify(contextWrapper));
+    console.log(`[APP] Contexto do quiz salvo no localStorage para o ID ${tid}.`);
     
     setTransactionId(tid);
-    setQuizContext(context); // Guarda o contexto para a prévia
+    setQuizContext(context);
     setView('preview');
   };
 
@@ -89,7 +93,7 @@ function App() {
       {view === 'preview' && transactionId && quizContext && (
         <ReportPreview
           transactionId={transactionId}
-          quizContext={quizContext} // Passa o contexto para a prévia
+          quizContext={quizContext} 
           onUnlock={handleUnlockReport}
         />
       )}
