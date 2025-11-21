@@ -72,7 +72,6 @@ app.post('/api/quiz/submit', (req, res) => {
     if (!answers || !questions) return res.status(400).json({ message: 'Dados inválidos' });
     const transactionId = uuidv4();
     
-    // ARQUITETURA CORRETA: Guarda os dados completos na memória do servidor
     transactions.set(transactionId, { 
         answers, 
         questions, 
