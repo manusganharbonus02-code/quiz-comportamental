@@ -26,11 +26,12 @@ export const ReportFull: React.FC<ReportFullProps> = ({ transactionId, onRestart
   useEffect(() => {
     const loadReport = async () => {
       try {
-        // CORREÇÃO: Usando a função correta que busca pelo ID
+        // CORREÇÃO: Usando a função correta que busca pelo ID da transação
         const data = await fetchFullReport(transactionId);
         setReport(data);
       } catch (err: any) {
-        setError('Falha ao carregar o relatório. Verifique se o pagamento foi confirmado.');
+        console.error("Error loading full report:", err);
+        setError('Falha ao carregar o relatório. Verifique se o pagamento foi confirmado e tente novamente.');
       } finally {
         setLoading(false);
       }
@@ -50,7 +51,7 @@ export const ReportFull: React.FC<ReportFullProps> = ({ transactionId, onRestart
       <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center text-white p-4 text-center font-sans">
         <div className="w-16 h-16 border-4 border-amber-500 border-t-transparent rounded-full animate-spin mb-6"></div>
         <h2 className="text-2xl font-bold mb-2">Gerando Dossiê Completo...</h2>
-        <p className="text-slate-400 max-w-md">Sua análise exclusiva está sendo compilada.</p>
+        <p className="text-slate-400 max-w-md">Sua análise exclusiva está sendo compilada pela nossa IA.</p>
       </div>
     );
   }
