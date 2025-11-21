@@ -7,7 +7,8 @@ import { QuizData, Answers } from '../types';
 import { AlertTriangle, CheckCircle2 } from 'lucide-react';
 
 interface QuizProps {
-  onComplete: (transactionId: string) => void;
+  // A assinatura da função mudou para incluir as respostas
+  onComplete: (transactionId: string, answers: Answers) => void;
 }
 
 export const Quiz: React.FC<QuizProps> = ({ onComplete }) => {
@@ -42,13 +43,13 @@ export const Quiz: React.FC<QuizProps> = ({ onComplete }) => {
         answers: finalAnswers,
       };
       const result = await startCheckout(payload);
-      onComplete(result.transactionId);
+      
+      // Agora passamos o ID e as respostas de volta para o App.tsx
+      onComplete(result.transactionId, finalAnswers);
+
     } catch (err: any) {
       console.error("Error submitting quiz:", err);
       let msg = "Ocorreu um erro ao processar suas respostas.";
-      if (err.message && err.message.includes('502')) {
-        msg = "Servidor instável. Por favor, tente novamente em 5 segundos.";
-      }
       setError(msg);
       setIsSubmitting(false);
     }
