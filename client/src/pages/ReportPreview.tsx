@@ -3,34 +3,39 @@ import { fetchReportPreview } from '../services/apiService';
 import { Button } from '../components/ui/Button';
 import { Card, CardContent } from '../components/ui/Card';
 import { Lock, ArrowRight, AlertCircle, ShieldCheck, Zap, TrendingUp, EyeOff, CheckSquare } from 'lucide-react';
+import { QuizData } from '../types';
 
 interface ReportPreviewProps {
   transactionId: string;
+  quizContext: QuizData; // Agora recebe o contexto do quiz
   onUnlock: () => void;
 }
 
-export const ReportPreview: React.FC<ReportPreviewProps> = ({ transactionId, onUnlock }) => {
+export const ReportPreview: React.FC<ReportPreviewProps> = ({ transactionId, quizContext, onUnlock }) => {
   const [previewText, setPreviewText] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null); // Estado para guardar o erro
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     const loadPreview = async () => {
-      setError(null);
-      setLoading(true);
+      if (!quizContext) {
+        setError("Dados do quiz não encontrados para gerar a prévia.");
+        setLoading(false);
+        return;
+      }
       try {
-        const data = await fetchReportPreview(transactionId);
+        // Agora enviamos o contexto completo para a API
+        const data = await fetchReportPreview(quizContext);
         setPreviewText(data.previewText);
       } catch (err: any) {
-        // AGORA, NÓS GUARDAMOS A MENSAGEM DE ERRO REAL
-        console.error("Falha ao carregar a prévia:", err);
-        setError(err.message || "Ocorreu um erro desconhecido ao gerar seu insight.");
+        console.error("Failed to load preview:", err);
+        setError(err.message || "Ocorreu um erro ao gerar seu insight.");
       } finally {
         setLoading(false);
       }
     };
     loadPreview();
-  }, [transactionId]);
+  }, [quizContext]);
 
   return (
     <div className="min-h-screen bg-slate-950 py-12 px-4 flex items-center justify-center font-sans">
@@ -60,7 +65,6 @@ export const ReportPreview: React.FC<ReportPreviewProps> = ({ transactionId, onU
                   <div className="h-5 bg-slate-800 rounded w-5/6"></div>
                 </div>
               )}
-              {/* LÓGICA ATUALIZADA: MOSTRA O ERRO OU O INSIGHT */}
               {!loading && (
                 <div className={`text-xl md:text-2xl font-medium italic leading-relaxed border-l-4 pl-6 ${error ? 'text-red-400 border-red-500' : 'text-slate-200 border-amber-500'}`}>
                   {error ? (
