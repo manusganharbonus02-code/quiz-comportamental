@@ -41,8 +41,12 @@ export const Quiz: React.FC<QuizProps> = ({ onComplete }) => {
         questions: ALL_QUESTIONS,
         answers: finalAnswers,
       };
+      // Envia os dados para o servidor e recebe o ID da transação
       const result = await startCheckout(payload);
+      
+      // Passa apenas o ID para o App.tsx, que agora gerencia o fluxo
       onComplete(result.transactionId);
+
     } catch (err: any) {
       console.error("Error submitting quiz:", err);
       setError("Ocorreu um erro ao processar suas respostas.");
