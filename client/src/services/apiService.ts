@@ -16,6 +16,7 @@ const API_BASE_URL = isProduction
 
 console.log(`[API SERVICE] Connecting to: ${API_BASE_URL} (Prod: ${isProduction})`);
 
+// 1. Envia o quiz, recebe um ID para o checkout
 export const startCheckout = async (quizData: QuizData): Promise<TransactionResponse> => {
   try {
     const response = await fetch(`${API_BASE_URL}/quiz/submit`, {
@@ -25,7 +26,7 @@ export const startCheckout = async (quizData: QuizData): Promise<TransactionResp
     });
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
-      throw new Error(errorData.message || 'Erro ao salvar respostas.');
+      throw new Error(errorData.message || 'Erro ao iniciar o checkout.');
     }
     return await response.json();
   } catch (error) {
@@ -34,41 +35,48 @@ export const startCheckout = async (quizData: QuizData): Promise<TransactionResp
   }
 };
 
-export const fetchReportPreview = async (transactionId: string): Promise<{ previewText: string }> => {
+// 2. Envia os dados do quiz para gerar a prévia
+export const fetchReportPreview = async (quizData: QuizData): Promise<{ previewText: string }> => {
   try {
     const response = await fetch(`${API_BASE_URL}/report/preview`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ transactionId }),
+      body: JSON.stringify(quizData), // Envia os dados completos
     });
 
-    // MELHORIA: Captura a mensagem de erro específica do servidor
     if (!response.ok) {
-      const errorBody = await response.json().catch(() => ({ message: 'Erro desconhecido ao contatar o servidor.' }));
+      const errorBody = await response.json().catch(() => ({ message: 'Erro desconhecido ao gerar prévia.' }));
       throw new Error(errorBody.message);
     }
     return await response.json();
   } catch (error) {
-    // Re-lança o erro para o componente poder capturá-lo
     throw error;
   }
 };
 
-export const fetchFullReport = async (transactionId: string): Promise<FullReportData> => {
+// 3. Envia os dados do quiz para gerar o relatório COMPLETO
+export const generateFullReport = async (quizData: QuizData): Promise<FullReportData> => {
   try {
-    const response = await fetch(`${API_BASE_URL}/report/full/${transactionId}`, {
-      method: 'GET',
-      headers: { 'Content-Type': 'application/json' }
+    const response = await fetch(`${API_BASE_URL}/report/generate`, { // Novo endpoint
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(quizData),
     });
-    if (response.status === 403) {
-      throw new Error('PAYMENT_REQUIRED');
-    }
     if (!response.ok) {
-      throw new Error('Erro ao gerar relatório.');
+        const errorBody = await response.json().catch(() => ({ message: 'Erro desconhecido ao gerar relatório.' }));
+      throw new Error(errorBody.message);
     }
     return await response.json();
   } catch (error) {
-    console.error("Error in fetchFullReport:", error);
+    console.error("Error in generateFullReport:", error);
     throw error;
   }
+};
+
+/**
+ * @deprecated fetchFullReport está obsoleto na nova arquitetura. Use generateFullReport.
+ */
+export const fetchFullReport = async (transactionId: string): Promise<FullReportData> => {
+  console.warn("fetchFullReport is deprecated and should not be used.");
+  throw new Error("fetchFullReport is deprecated. Use generateFullReport instead.");
 };
