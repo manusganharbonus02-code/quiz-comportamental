@@ -19,7 +19,6 @@ export interface TransactionResponse {
 
 // --- NOVAS INTERFACES PARA O RELATÓRIO COMPLETO ---
 
-// FASE 1: Análise Técnica e Validação
 export interface ReportValidation {
   methodology: string;
   reliabilityIndex: number;
@@ -27,11 +26,10 @@ export interface ReportValidation {
 }
 
 export interface BehavioralPattern {
-  name: string; // Ex: "O Estrategista Cauteloso"
-  formula: string; // Ex: "F:90 A:60 I:40 C:80"
+  name: string;
+  formula: string;
 }
 
-// FASE 2: Apresentação dos Resultados
 export interface ActionFilter {
   speed: 'Rápido' | 'Reflexivo';
   focus: 'Pessoas' | 'Tarefas';
@@ -39,48 +37,36 @@ export interface ActionFilter {
 }
 
 export interface CoreDrivers {
-  motivation: string[]; // O que energiza
-  friction: string[];   // O que drena energia
+  motivation: string[];
+  friction: string[];
   idealEnvironment: string;
 }
 
-// FASE 3: Aplicação Estratégica
+// NOVA INTERFACE PARA A ANÁLISE 360º
+export interface SubFactor {
+  name: string; // Ex: "Nível de Detalhismo"
+  analysis: string;
+}
+
 export interface BlindSpotAnalysis {
-  title: string; // "O Custo da Potência"
+  title: string;
   description: string;
 }
 
 export interface DevelopmentProtocol {
-  action: string; // O que fazer
-  rationale: string; // O porquê técnico
-  expectedBenefit: string; // O ROI Comportamental
-}
-
-
-/**
- * @deprecated A interface ReportData antiga será removida. Use FullReportData.
- */
-export interface ReportData {
-  archetypeTitle: string;
-  archetypeDescription: string;
-  dimensionAnalyses: Array<{
-    dimensionName: Dimension | string;
-    score: number;
-    interpretation: string;
-    strengths: string[];
-    recommendations:string[];
-  }>;
+  action: string;
+  rationale: string;
+  expectedBenefit: string;
 }
 
 // A nova estrutura de dados mestre para o relatório
 export interface FullReportData {
-  // Metadados
-  archetype: string; // Nome principal (mantido para consistência)
+  archetype: string;
   
   // FASE 1
   validation: ReportValidation;
   pattern: BehavioralPattern;
-  summary: string; // Sumário Executivo
+  summary: string;
   
   // FASE 2
   actionFilter: ActionFilter;
@@ -90,6 +76,7 @@ export interface FullReportData {
     score: number;
     analysis: string;
   }>;
+  subFactors: SubFactor[]; // ADICIONADO: Análise 360º de Subfatores
   
   // FASE 3
   blindSpot: BlindSpotAnalysis;
