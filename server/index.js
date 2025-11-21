@@ -43,7 +43,7 @@ if (clientDistPath) {
   app.use(express.static(clientDistPath));
 }
 
-// --- BANCO DE DADOS EM MEMÓRIA ---
+// O Map agora não é mais necessário para o fluxo principal, mas pode ser útil para logs ou débug futuro.
 const transactions = new Map();
 
 // --- LÓGICA DE ANÁLISE QUALITATIVA ---
@@ -74,13 +74,13 @@ const calculateScores = (answers, questions) => {
 };
 
 // --- ROTAS DA API ---
+
+// 1. Rota para submeter o quiz e obter um ID de transação. Não guarda mais dados.
 app.post('/api/quiz/submit', (req, res) => {
   try {
     const { answers, questions } = req.body;
     if (!answers || !questions) return res.status(400).json({ message: 'Dados inválidos' });
     const transactionId = uuidv4();
-    const { scores, extremeBehaviors } = calculateScores(answers, questions);
-    transactions.set(transactionId, { answers, questions, scores, extremeBehaviors, status: 'PENDING', createdAt: new Date() });
     res.status(201).json({ transactionId });
   } catch (e) {
     console.error("Erro em /api/quiz/submit:", e);
@@ -88,21 +88,20 @@ app.post('/api/quiz/submit', (req, res) => {
   }
 });
 
+// 2. Rota para gerar a prévia. Agora recebe os dados do quiz diretamente.
 app.post('/api/report/preview', async (req, res) => {
   try {
-    const { transactionId } = req.body;
-    const t = transactions.get(transactionId);
-    if (!t) return res.status(404).json({ message: "Sessão não encontrada" });
-    if (!ai) {
-        console.error("Tentativa de gerar prévia sem a API_KEY configurada.");
-        return res.status(503).json({ message: "Serviço de IA indisponível." });
-    }
+    const { answers, questions } = req.body;
+    if (!answers || !questions) return res.status(400).json({ message: "Dados do quiz ausentes." });
+    if (!ai) return res.status(503).json({ message: "Serviço de IA indisponível." });
+
+    const { scores, extremeBehaviors } = calculateScores(answers, questions);
 
     let strategyPrompt;
-    if (t.extremeBehaviors.length > 0) {
-        strategyPrompt = `2. CONECTE UMA OBSERVAÇÃO: Aponte que o comportamento do usuário em relação a '${t.extremeBehaviors[0]}' se alinha com seu score mais baixo. Descreva isso como uma 'área de alavancagem' chave para seu crescimento.`;
+    if (extremeBehaviors.length > 0) {
+        strategyPrompt = `2. CONECTE UMA OBSERVAÇÃO: Aponte que o comportamento do usuário em relação a '${extremeBehaviors[0]}' se alinha com seu score mais baixo. Descreva isso como uma 'área de alavancagem' chave para seu crescimento.`;
     } else {
-        const lowestScore = Object.entries(t.scores).sort((a, b) => a[1] - b[1])[0];
+        const lowestScore = Object.entries(scores).sort((a, b) => a[1] - b[1])[0];
         strategyPrompt = `2. DESTAQUE UMA OPORTUNIDADE: Aponte que seu score de ${lowestScore[1]} em '${lowestScore[0]}' representa a maior oportunidade de otimização em seu perfil, com impacto direto em seus resultados.`;
     }
 
@@ -128,27 +127,28 @@ app.post('/api/report/preview', async (req, res) => {
   }
 });
 
-
-app.get('/api/report/full/:transactionId', async (req, res) => {
+// 3. NOVO ENDPOINT para gerar o relatório completo de forma "sem estado"
+app.post('/api/report/generate', async (req, res) => {
   try {
-    const { transactionId } = req.params;
-    const t = transactions.get(transactionId);
-    if (!t) return res.status(404).json({ message: "Não encontrado" });
-    if (t.fullReport) return res.json(t.fullReport);
+    const { answers, questions } = req.body;
+    if (!answers || !questions) return res.status(400).json({ message: "Dados do quiz ausentes." });
     if (!ai) return res.status(503).json({ message: "IA indisponível" });
+
+    const { scores, extremeBehaviors } = calculateScores(answers, questions);
+    
     const prompt = `
       ATUE COMO: Um psicólogo organizacional e mentor de carreira de elite, especializado em análise comportamental DISC.
-      CLIENTE: Um profissional buscando um relatório profundo e acionável. DADOS BRUTOS: Scores (0-100): ${JSON.stringify(t.scores)} e Comportamentos Extremos (Confissões): ${JSON.stringify(t.extremeBehaviors)}.
+      CLIENTE: Um profissional buscando um relatório profundo e acionável. DADOS BRUTOS: Scores (0-100): ${JSON.stringify(scores)} e Comportamentos Extremos (Confissões): ${JSON.stringify(extremeBehaviors)}.
       TAREFA: Gere um relatório ESTRUTURADO em JSON, sem markdown, seguindo o schema abaixo. Seja profundo, técnico e persuasivo.
       
       SCHEMA JSON OBRIGATÓRIO: { 
         "archetype": "Crie um nome de Padrão Comportamental Único e poderoso. Ex: 'O Estrategista Resoluto', 'O Arquiteto de Pessoas'.", 
         "validation": { "methodology": "Análise Comportamental (DISC)", "reliabilityIndex": ${Math.floor(88 + Math.random() * 11)}, "confidentialityClause": "Este relatório é estritamente confidencial e gerado exclusivamente para o seu desenvolvimento pessoal e profissional." }, 
-        "pattern": { "name": "Use o mesmo nome do 'archetype'.", "formula": "F:${t.scores.Foco} A:${t.scores.Adaptabilidade} I:${t.scores.Inovacao} C:${t.scores.Coragem} S:${t.scores.InteligenciaSocial}" }, 
+        "pattern": { "name": "Use o mesmo nome do 'archetype'.", "formula": "F:${scores.Foco} A:${scores.Adaptabilidade} I:${scores.Inovacao} C:${scores.Coragem} S:${scores.InteligenciaSocial}" }, 
         "summary": "Escreva um sumário executivo denso de 3 parágrafos. Parágrafo 1: Valide a identidade do usuário usando suas 'Confissões' e scores. Parágrafo 2: Aponte a dor oculta que ele não admite. Parágrafo 3: Pinte uma visão inspiradora do seu potencial máximo.", 
-        "actionFilter": { "speed": "${t.scores.Coragem > 60 ? 'Rápido' : 'Reflexivo'}", "focus": "${t.scores.InteligenciaSocial > 55 ? 'Pessoas' : 'Tarefas'}", "description": "Descreva como a combinação de velocidade e foco define o estilo de comunicação, decisão e resposta a conflitos do usuário." }, 
+        "actionFilter": { "speed": "${scores.Coragem > 60 ? 'Rápido' : 'Reflexivo'}", "focus": "${scores.InteligenciaSocial > 55 ? 'Pessoas' : 'Tarefas'}", "description": "Descreva como a combinação de velocidade e foco define o estilo de comunicação, decisão e resposta a conflitos do usuário." }, 
         "coreDrivers": { "motivation": ["Liste 3 fatores intrínsecos que energizam este perfil."], "friction": ["Liste 3 fatores que drenam a energia deste perfil."], "idealEnvironment": "Descreva o ambiente de trabalho ideal que otimiza o desempenho, usando termos como 'Engenharia Comportamental'." }, 
-        "dimensions": [ {"name": "Foco", "score": ${t.scores.Foco}, "analysis": "Análise profunda de 3-4 frases sobre o impacto do nível de foco na produtividade e resultados financeiros."}, {"name": "Adaptabilidade", "score": ${t.scores.Adaptabilidade}, "analysis": "Análise profunda de 3-4 frases sobre como ele lida com crises e mudanças inesperadas."}, {"name": "Inovacao", "score": ${t.scores.Inovacao}, "analysis": "Análise profunda de 3-4 frases sobre a capacidade de criar ou otimizar."}, {"name": "Coragem", "score": ${t.scores.Coragem}, "analysis": "Análise profunda de 3-4 frases sobre a tolerância ao risco e a capacidade de tomar decisões difíceis."}, {"name": "InteligenciaSocial", "score": ${t.scores.InteligenciaSocial}, "analysis": "Análise profunda de 3-4 frases sobre como ele lidera, influencia ou manipula."} ],
+        "dimensions": [ {"name": "Foco", "score": ${scores.Foco}, "analysis": "Análise profunda de 3-4 frases sobre o impacto do nível de foco na produtividade e resultados financeiros."}, {"name": "Adaptabilidade", "score": ${scores.Adaptabilidade}, "analysis": "Análise profunda de 3-4 frases sobre como ele lida com crises e mudanças inesperadas."}, {"name": "Inovacao", "score": ${scores.Inovacao}, "analysis": "Análise profunda de 3-4 frases sobre a capacidade de criar ou otimizar."}, {"name": "Coragem", "score": ${scores.Coragem}, "analysis": "Análise profunda de 3-4 frases sobre a tolerância ao risco e a capacidade de tomar decisões difíceis."}, {"name": "InteligenciaSocial", "score": ${scores.InteligenciaSocial}, "analysis": "Análise profunda de 3-4 frases sobre como ele lidera, influencia ou manipula."} ],
         "subFactors": [
           {"name": "Nível de Detalhismo", "analysis": "Baseado nos scores de Foco e Adaptabilidade, analise em 2-3 frases se o usuário é orientado a detalhes ou ao quadro geral."},
           {"name": "Tolerância ao Risco", "analysis": "Baseado nos scores de Coragem e Inovacao, analise em 2-3 frases a propensão do usuário a tomar riscos calculados."},
@@ -160,20 +160,17 @@ app.get('/api/report/full/:transactionId', async (req, res) => {
     `;
     const response = await ai.models.generateContent({ model: 'gemini-2.5-flash', contents: prompt, config: { responseMimeType: 'application/json' } });
     const data = JSON.parse(response.text);
-    t.fullReport = data;
     res.json(data);
   } catch (e) {
     console.error("Erro ao gerar relatório completo:", e);
-    res.status(500).json({ message: 'Erro IA' });
+    res.status(500).json({ message: 'Erro na IA ao gerar relatório.' });
   }
 });
 
 app.post('/api/kiwify-webhook', (req, res) => {
   const d = req.body;
   const tid = d.aff_content || (d.order && d.order.src);
-  if (tid && transactions.has(tid) && d.order_status === 'paid') {
-    transactions.get(tid).status = 'PAID';
-  }
+  console.log(`Webhook recebido para a transação: ${tid}, Status: ${d.order_status}`);
   res.send('OK');
 });
 
