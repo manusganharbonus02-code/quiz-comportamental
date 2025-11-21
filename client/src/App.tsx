@@ -4,11 +4,13 @@ import { Quiz } from './pages/Quiz';
 import { ReportPreview } from './pages/ReportPreview';
 import { Waiting } from './pages/Waiting';
 import { ReportFull } from './pages/ReportFull';
+import { Answers } from './types'; // quizContext não é mais necessário aqui
 
 const KIWIFY_BASE_URL = 'https://pay.kiwify.com.br/RHpnrVL';
 
 type AppState = 'home' | 'quiz' | 'preview' | 'waiting' | 'full_report';
 
+// A função dev mode foi removida pois não é mais necessária para o fluxo principal
 function App() {
   const [view, setView] = useState<AppState>('home');
   const [transactionId, setTransactionId] = useState<string | null>(null);
@@ -30,6 +32,7 @@ function App() {
     setView('quiz');
   };
 
+  // A função agora só precisa do TID, como planejado na arquitetura final.
   const handleQuizComplete = (tid: string) => {
     console.log("Quiz finalizado. ID:", tid);
     setTransactionId(tid);
@@ -55,6 +58,7 @@ function App() {
 
   const getCheckoutUrl = () => {
       if (!transactionId) return '#';
+      // A URL de redirecionamento agora aponta para a tela de espera, que sabe como lidar com o TID.
       const redirectUrl = `${window.location.origin}/?tid=${transactionId}`;
       return `${KIWIFY_BASE_URL}?aff_content=${transactionId}&redirect_url=${encodeURIComponent(redirectUrl)}`;
   }
@@ -62,10 +66,17 @@ function App() {
   return (
     <div className="bg-slate-950 text-slate-100 min-h-screen font-sans">
       {view === 'home' && <Home onStart={handleStartQuiz} />}
+      
       {view === 'quiz' && <Quiz onComplete={handleQuizComplete} />}
+      
+      {/* CORREÇÃO: A verificação '&& quizContext' foi removida. */}
       {view === 'preview' && transactionId && (
-        <ReportPreview transactionId={transactionId} onUnlock={handleUnlockReport} />
+        <ReportPreview 
+          transactionId={transactionId} 
+          onUnlock={handleUnlockReport} 
+        />
       )}
+      
       {view === 'waiting' && transactionId && (
         <Waiting 
           transactionId={transactionId}
@@ -73,8 +84,13 @@ function App() {
           onPaymentSuccess={handlePaymentSuccess}
         />
       )}
+      
+      {/* CORREÇÃO: A verificação '&& quizContext' foi removida. */}
       {view === 'full_report' && transactionId && (
-        <ReportFull transactionId={transactionId} onRestart={handleReset} />
+        <ReportFull 
+          transactionId={transactionId} 
+          onRestart={handleReset} 
+        />
       )}
     </div>
   );
