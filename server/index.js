@@ -1,6 +1,6 @@
 import express from 'express';
 import cors from 'cors';
-import { GoogleGenAI } from '@google/genai';
+import { GoogleGenAI, HarmCategory, HarmBlockThreshold } from '@google/genai';
 import { v4 as uuidv4 } from 'uuid';
 import 'dotenv/config';
 import path from 'path';
@@ -126,31 +126,39 @@ app.get('/api/report/preview/:transactionId', async (req, res) => {
 
     const prompt = `
         ATUE COMO: Um mentor de carreira de elite, escrevendo uma nota de capa para um dossiê executivo.
-        SUA MISSÃO: Escrever um insight de 40-50 palavras. O texto deve ser intrigante e mostrar que a análise é personalizada, criando o desejo de ler o relatório completo. NÃO exceda 50 palavras.
+        SUA MISSÃO: Escrever um insight de 40-50 palavras. O texto deve ser intrigante e mostrar que a análise é personalizada, criando o desejo de ler o relatório completo.
         ESTRATÉGIA:
         1. Inicie com uma validação: "Sua análise revelou um padrão comportamental claro..."
         ${strategyPrompt}
         3. CRIE CURIOSIDADE: Mencione que o dossiê contém o "Protocolo de Otimização de Performance" para transformar essa área de alavancagem em uma força.
         4. TOM DE VOZ: Estratégico, perspicaz, encorajador. Não use markdown ou aspas.
     `;
+
+    // CORREÇÃO CRÍTICA: Adicionando as configurações de segurança para evitar o bloqueio.
+    const safetySettings = [
+      { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE },
+      { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },
+      { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_NONE },
+      { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_NONE },
+    ];
+
     const response = await ai.models.generateContent({ 
         model: 'gemini-2.5-flash', 
         contents: prompt, 
-        // CORREÇÃO 1: Adicionado o limite de tokens para garantir uma resposta curta
-        config: { temperature: 0.75, maxOutputTokens: 100 } 
+        config: { temperature: 0.75 },
+        safetySettings
     });
     
     if (!response.text) {
         throw new Error("A IA não retornou uma resposta, possivelmente devido a filtros de segurança do Google.");
     }
     
-    // CORREÇÃO 2: Adicionada a limpeza de caracteres especiais
-    const cleanText = response.text.trim().replace(/[*#"]/g, '');
-
-    res.json({ previewText: cleanText });
+    res.json({ previewText: response.text.trim().replace(/[*#"]/g, '') });
   } catch (e) {
     console.error("Erro detalhado na geração da prévia:", e);
-    res.status(500).json({ message: `Erro na IA. Causa: ${e.message}` });
+    // Tenta extrair uma mensagem mais clara do erro da API
+    const errorMessage = e.response?.candidates?.[0]?.safetyRatings?.[0]?.category || e.message;
+    res.status(500).json({ message: `Erro na IA. Causa: ${errorMessage}` });
   }
 });
 
@@ -179,23 +187,7 @@ app.get('/api/report/full/:transactionId', async (req, res) => {
       ATUE COMO: Um psicólogo organizacional e mentor de carreira de elite, especializado em análise comportamental DISC.
       CLIENTE: Um profissional buscando um relatório profundo e acionável. DADOS BRUTOS: Scores (0-100): ${JSON.stringify(scores)} e Comportamentos Extremos (Confissões): ${JSON.stringify(extremeBehaviors)}.
       TAREFA: Gere um relatório ESTRUTURADO em JSON, sem markdown, seguindo o schema abaixo. Seja profundo, técnico e persuasivo.
-      
-      SCHEMA JSON OBRIGATÓRIO: { 
-        "archetype": "Crie um nome de Padrão Comportamental Único e poderoso. Ex: 'O Estrategista Resoluto', 'O Arquiteto de Pessoas'.", 
-        "validation": { "methodology": "Análise Comportamental (DISC)", "reliabilityIndex": ${Math.floor(88 + Math.random() * 11)}, "confidentialityClause": "Este relatório é estritamente confidencial e gerado exclusivamente para o seu desenvolvimento pessoal e profissional." }, 
-        "pattern": { "name": "Use o mesmo nome do 'archetype'.", "formula": "F:${scores.Foco} A:${scores.Adaptabilidade} I:${scores.Inovacao} C:${scores.Coragem} S:${scores.InteligenciaSocial}" }, 
-        "summary": "Escreva um sumário executivo denso de 3 parágrafos. Parágrafo 1: Valide a identidade do usuário usando suas 'Confissões' e scores. Parágrafo 2: Aponte a dor oculta que ele não admite. Parágrafo 3: Pinte uma visão inspiradora do seu potencial máximo.", 
-        "actionFilter": { "speed": "${scores.Coragem > 60 ? 'Rápido' : 'Reflexivo'}", "focus": "${scores.InteligenciaSocial > 55 ? 'Pessoas' : 'Tarefas'}", "description": "Descreva como a combinação de velocidade e foco define o estilo de comunicação, decisão e resposta a conflitos do usuário." }, 
-        "coreDrivers": { "motivation": ["Liste 3 fatores intrínsecos que energizam este perfil."], "friction": ["Liste 3 fatores que drenam a energia deste perfil."], "idealEnvironment": "Descreva o ambiente de trabalho ideal que otimiza o desempenho, usando termos como 'Engenharia Comportamental'." }, 
-        "dimensions": [ {"name": "Foco", "score": ${scores.Foco}, "analysis": "Análise profunda de 3-4 frases sobre o impacto do nível de foco na produtividade e resultados financeiros."}, {"name": "Adaptabilidade", "score": ${scores.Adaptabilidade}, "analysis": "Análise profunda de 3-4 frases sobre como ele lida com crises e mudanças inesperadas."}, {"name": "Inovacao", "score": ${scores.Inovacao}, "analysis": "Análise profunda de 3-4 frases sobre a capacidade de criar ou otimizar."}, {"name": "Coragem", "score": ${scores.Coragem}, "analysis": "Análise profunda de 3-4 frases sobre a tolerância ao risco e a capacidade de tomar decisões difíceis."}, {"name": "InteligenciaSocial", "score": ${scores.InteligenciaSocial}, "analysis": "Análise profunda de 3-4 frases sobre como ele lidera, influencia ou manipula."} ],
-        "subFactors": [
-          {"name": "Nível de Detalhismo", "analysis": "Baseado nos scores de Foco e Adaptabilidade, analise em 2-3 frases se o usuário é orientado a detalhes ou ao quadro geral."},
-          {"name": "Tolerância ao Risco", "analysis": "Baseado nos scores de Coragem e Inovacao, analise em 2-3 frases a propensão do usuário a tomar riscos calculados."},
-          {"name": "Estilo de Liderança", "analysis": "Baseado no score de InteligenciaSocial, descreva em 2-3 frases se a liderança é mais diretiva, mentora ou inspiradora."}
-        ],
-        "blindSpot": { "title": "O Custo Oculto da sua Genialidade", "description": "Baseado na pontuação mais baixa ou em uma 'Confissão' crítica, descreva o Ponto Cego Fatal. Uma frase longa e impactante que resume o maior risco comportamental dele." }, 
-        "actionPlan": [ {"action": "Ação prática e imediata para amanhã.", "rationale": "O porquê técnico desta ação.", "expectedBenefit": "O Retorno Sobre o Investimento (ROI) comportamental esperado."}, {"action": "Uma mudança de hábito mental a ser cultivada.", "rationale": "O porquê técnico desta ação.", "expectedBenefit": "O Retorno Sobre o Investimento (ROI) comportamental esperado."}, {"action": "Um desafio de desconforto para evoluir.", "rationale": "O porquê técnico desta ação.", "expectedBenefit": "O Retorno Sobre o Investimento (ROI) comportamental esperado."}, {"action": "Uma estratégia de longo prazo.", "rationale": "O porquê técnico desta ação.", "expectedBenefit": "O Retorno Sobre o Investimento (ROI) comportamental esperado."} ] 
-      }
+      SCHEMA JSON OBRIGATÓRIO: { "archetype": "Crie um nome de Padrão Comportamental Único e poderoso. Ex: 'O Estrategista Resoluto', 'O Arquiteto de Pessoas'.", "validation": { "methodology": "Análise Comportamental (DISC)", "reliabilityIndex": ${Math.floor(88 + Math.random() * 11)}, "confidentialityClause": "Este relatório é estritamente confidencial e gerado exclusivamente para o seu desenvolvimento pessoal e profissional." }, "pattern": { "name": "Use o mesmo nome do 'archetype'.", "formula": "F:${scores.Foco} A:${scores.Adaptabilidade} I:${scores.Inovacao} C:${scores.Coragem} S:${scores.InteligenciaSocial}" }, "summary": "Escreva um sumário executivo denso de 3 parágrafos. Parágrafo 1: Valide a identidade do usuário usando suas 'Confissões' e scores. Parágrafo 2: Aponte a dor oculta que ele não admite. Parágrafo 3: Pinte uma visão inspiradora do seu potencial máximo.", "actionFilter": { "speed": "${scores.Coragem > 60 ? 'Rápido' : 'Reflexivo'}", "focus": "${scores.InteligenciaSocial > 55 ? 'Pessoas' : 'Tarefas'}", "description": "Descreva como a combinação de velocidade e foco define o estilo de comunicação, decisão e resposta a conflitos do usuário." }, "coreDrivers": { "motivation": ["Liste 3 fatores intrínsecos que energizam este perfil."], "friction": ["Liste 3 fatores que drenam a energia deste perfil."], "idealEnvironment": "Descreva o ambiente de trabalho ideal que otimiza o desempenho, usando termos como 'Engenharia Comportamental'." }, "dimensions": [ {"name": "Foco", "score": ${scores.Foco}, "analysis": "Análise profunda de 3-4 frases sobre o impacto do nível de foco na produtividade e resultados financeiros."}, {"name": "Adaptabilidade", "score": ${scores.Adaptabilidade}, "analysis": "Análise profunda de 3-4 frases sobre como ele lida com crises e mudanças inesperadas."}, {"name": "Inovacao", "score": ${scores.Inovacao}, "analysis": "Análise profunda de 3-4 frases sobre a capacidade de criar ou otimizar."}, {"name": "Coragem", "score": ${scores.Coragem}, "analysis": "Análise profunda de 3-4 frases sobre a tolerância ao risco e a capacidade de tomar decisões difíceis."}, {"name": "InteligenciaSocial", "score": ${scores.InteligenciaSocial}, "analysis": "Análise profunda de 3-4 frases sobre como ele lidera, influencia ou manipula."} ], "subFactors": [ {"name": "Nível de Detalhismo", "analysis": "Baseado nos scores de Foco e Adaptabilidade, analise em 2-3 frases se o usuário é orientado a detalhes ou ao quadro geral."}, {"name": "Tolerância ao Risco", "analysis": "Baseado nos scores de Coragem e Inovacao, analise em 2-3 frases a propensão do usuário a tomar riscos calculados."}, {"name": "Estilo de Liderança", "analysis": "Baseado no score de InteligenciaSocial, descreva em 2-3 frases se a liderança é mais diretiva, mentora ou inspiradora."} ], "blindSpot": { "title": "O Custo Oculto da sua Genialidade", "description": "Baseado na pontuação mais baixa ou em uma 'Confissão' crítica, descreva o Ponto Cego Fatal. Uma frase longa e impactante que resume o maior risco comportamental dele." }, "actionPlan": [ {"action": "Ação prática e imediata para amanhã.", "rationale": "O porquê técnico desta ação.", "expectedBenefit": "O Retorno Sobre o Investimento (ROI) comportamental esperado."}, {"action": "Uma mudança de hábito mental a ser cultivada.", "rationale": "O porquê técnico desta ação.", "expectedBenefit": "O Retorno Sobre o Investimento (ROI) comportamental esperado."}, {"action": "Um desafio de desconforto para evoluir.", "rationale": "O porquê técnico desta ação.", "expectedBenefit": "O Retorno Sobre o Investimento (ROI) comportamental esperado."}, {"action": "Uma estratégia de longo prazo.", "rationale": "O porquê técnico desta ação.", "expectedBenefit": "O Retorno Sobre o Investimento (ROI) comportamental esperado."} ] }
     `;
     const response = await ai.models.generateContent({ model: 'gemini-2.5-flash', contents: prompt, config: { responseMimeType: 'application/json' } });
     const data = JSON.parse(response.text);
