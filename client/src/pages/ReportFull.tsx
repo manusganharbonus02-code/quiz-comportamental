@@ -26,11 +26,10 @@ export const ReportFull: React.FC<ReportFullProps> = ({ transactionId, onRestart
   useEffect(() => {
     const loadReport = async () => {
       try {
-        // CORREÇÃO: Usando a função correta que busca pelo ID da transação
+        // CORREÇÃO: Usando a função correta que busca pelo ID
         const data = await fetchFullReport(transactionId);
         setReport(data);
       } catch (err: any) {
-        console.error("Error loading full report:", err);
         setError('Falha ao carregar o relatório. Verifique se o pagamento foi confirmado e tente novamente.');
       } finally {
         setLoading(false);
