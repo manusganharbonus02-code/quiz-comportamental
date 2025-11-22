@@ -4,9 +4,9 @@ import { Quiz } from './pages/Quiz';
 import { ReportPreview } from './pages/ReportPreview';
 import { Waiting } from './pages/Waiting';
 import { ReportFull } from './pages/ReportFull';
-import { Answers } from './types';
 
-const KIWIFY_BASE_URL = 'https://pay.kiwify.com.br/RHpnrVL';
+// ATUALIZADO: Substitua pela sua URL de checkout da Hotmart
+const CHECKOUT_BASE_URL = 'https://pay.hotmart.com/SEU_CODIGO_DE_PRODUTO_AQUI';
 
 type AppState = 'home' | 'quiz' | 'preview' | 'waiting' | 'full_report';
 
@@ -16,7 +16,8 @@ function App() {
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    const urlTid = params.get('tid');
+    // A Hotmart também pode usar 'tid' no redirecionamento se configurarmos
+    const urlTid = params.get('tid') || params.get('transactionId');
 
     if (urlTid) {
         console.log("[APP] TID detectado, indo para a tela de espera:", urlTid);
@@ -56,10 +57,9 @@ function App() {
 
   const getCheckoutUrl = () => {
       if (!transactionId) return '#';
-      // A URL de redirecionamento agora aponta de volta para o site com o TID,
-      // permitindo que o useEffect acima retome o fluxo.
-      const redirectUrl = `${window.location.origin}/?tid=${transactionId}`;
-      return `${KIWIFY_BASE_URL}?aff_content=${transactionId}&redirect_url=${encodeURIComponent(redirectUrl)}`;
+      // ATUALIZADO: A Hotmart usa o parâmetro 'src' para rastrear o ID que enviamos.
+      // A URL de redirecionamento agora é configurada na plataforma da Hotmart, não aqui.
+      return `${CHECKOUT_BASE_URL}?src=${transactionId}`;
   }
 
   return (
